@@ -1,0 +1,112 @@
+// Prisma Schema for Mission Control
+// PostgreSQL database for Clawdbot task management
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// CORE MODELS
+// ============================================
+
+model Task {
+  // Identity
+  id          String   @id @default(uuid())
+  title       String
+  description String?  @db.Text
+  
+  // Execution State
+  status      TaskStatus @default(Backlog)
+  assignee    String?    // "human" or "clawdbot"
+  priority    Priority   @default(Medium)
+  tags        String[]   // Array of tags as strings
+  
+  // Bot Observability
+  planChecklist String[] // Ordered steps the bot intends to take
+  currentStepIndex Int   @default(0)
+  progressLog    TaskProgressLogEntry[] // Append-only log
+  blockedReason  String?
+  lastActionAt   DateTime?
+  
+  // Time Tracking
+  estimate     Float?    // Hours or points
+  timeSpent    Float?    @default(0)
+  
+  // Dates
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  startedAt    DateTime?
+  completedAt  DateTime?
+  dueDate      DateTime?
+  
+  // Audit
+  auditEvents  AuditEvent[]
+  
+  @@index([status])
+  @@index([assignee])
+  @@index([createdAt])
+}
+
+model AuditEvent {
+  id          String   @id @default(uuid())
+  
+  // Event Identity
+  eventType   String   // "task.created", "task.status_changed", etc.
+  entityType  String   // "Task", "User", etc.
+  entityId    String   // ID of the affected entity
+  
+  // Actor
+  actor       String   // "human" or "clawdbot"
+  
+  // Payload
+  before      Json?    // Snapshot or diff before change
+  after       Json?    // Snapshot or diff after change
+  
+  // Metadata
+  timestamp   DateTime @default(now())
+  
+  // Relationship
+  taskId      String?
+  task        Task?    @relation(fields: [taskId], references: [id])
+  
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@index([actor])
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum TaskStatus {
+  Backlog
+  Ready
+  InProgress
+  Blocked
+  Review
+  Done
+}
+
+enum Priority {
+  Low
+  Medium
+  High
+  Critical
+}
+
+// ============================================
+// TYPES (stored as JSON in PostgreSQL)
+// ============================================
+
+model TaskProgressLogEntry {
+  id          String   @id @default(uuid())
+  step        String   // Description of action taken
+  completedAt DateTime @default(now())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id])
+}

@@ -1,0 +1,152 @@
+// Prisma Schema for Mission Control
+// PostgreSQL database for Clawdbot task management
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// CORE MODELS
+// ============================================
+
+model Task {
+  // Identity
+  id          String   @id @default(uuid())
+  title       String
+  description String?  @db.Text
+  
+  // Execution State
+  status      String   @default("Backlog")
+  executionState String @default("queued") // queued | running | waiting | idle | failed | completed
+  assignee    String?
+  priority    String   @default("Medium")
+  tags        String[] 
+  
+  // Bot Observability
+  planChecklist String[]
+  currentStepIndex Int   @default(0)
+  blockedReason  String?
+  blockedBy      String[] // Array of task IDs that this task depends on
+  lastActionAt   DateTime?
+  lastHeartbeatAt DateTime?
+  
+  // Time Tracking
+  estimate     Float?
+  timeSpent    Float    @default(0)
+  
+  // Approval Gates
+  needsApproval Boolean @default(false)
+  approvedAt    DateTime?
+  approvedBy    String?
+  
+  // Dates
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  startedAt    DateTime?
+  completedAt  DateTime?
+  dueDate      DateTime?
+  
+  // Audit
+  auditEvents  AuditEvent[]
+  progressLog  TaskProgressLogEntry[]
+  botRuns      BotRun[]
+  dependencies TaskDependency[] @relation("DependentTask")
+  dependents   TaskDependency[] @relation("DependencyTask")
+  
+  @@index([status])
+  @@index([assignee])
+  @@index([executionState])
+  @@index([createdAt])
+}
+
+model AuditEvent {
+  id          String   @id @default(uuid())
+  
+  // Event Identity
+  eventType   String   // task.created, task.status_changed, task.execution_state_changed, etc.
+  entityType  String   // "Task", "BotRun"
+  entityId    String   // ID of the affected entity
+  
+  // Actor
+  actor       String   // "human" or "clawdbot"
+  
+  // Payload
+  before      Json?
+  after       Json?
+  
+  // Metadata
+  timestamp   DateTime @default(now())
+  
+  // Relationship
+  taskId      String?
+  task        Task?    @relation(fields: [taskId], references: [id])
+  
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@index([actor])
+  @@index([taskId])
+}
+
+model TaskProgressLogEntry {
+  id          String   @id @default(uuid())
+  step        String   // Description of action taken
+  status      String   @default("done") // pending | running | done | failed | skipped
+  completedAt DateTime @default(now())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id])
+  
+  @@index([taskId])
+}
+
+// ============================================
+// BOT RUN MODEL
+// ============================================
+
+model BotRun {
+  id          String   @id @default(uuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id])
+  
+  // Run Status
+  status      String   @default("running") // running | failed | completed | cancelled
+  
+  // Timing
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+  
+  // Summary & Logs
+  summary     String?
+  log         Json?    // Structured log entries
+  
+  // Retry tracking
+  attemptNumber Int    @default(1)
+  parentRunId  String? // For retries
+  
+  @@index([taskId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// ============================================
+// TASK DEPENDENCIES
+// ============================================
+
+model TaskDependency {
+  id              String   @id @default(uuid())
+  dependentTaskId String   // The task that is blocked
+  dependentTask   Task     @relation("DependentTask", fields: [dependentTaskId], references: [id])
+  
+  dependencyTaskId String  // The task this depends on
+  dependencyTask   Task    @relation("DependencyTask", fields: [dependencyTaskId], references: [id])
+  
+  createdAt       DateTime @default(now())
+  
+  @@unique([dependentTaskId, dependencyTaskId])
+  @@index([dependentTaskId])
+  @@index([dependencyTaskId])
+}

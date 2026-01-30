@@ -1,0 +1,292 @@
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import { PrismaClient } from '@prisma/client';
+import * as taskService from '../services/taskService';
+import { Task, TaskStatus, ExecutionState, CreateTaskInput, UpdateTaskInput } from '../../../shared/src/types';
+
+const prisma = new PrismaClient();
+
+const taskParamsSchema = z.object({
+  id: z.string().uuid()
+});
+
+const createTaskSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  assignee: z.string().optional(),
+  priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
+  tags: z.array(z.string()).optional(),
+  estimate: z.number().optional(),
+  dueDate: z.string().optional(),
+  planChecklist: z.array(z.string()).optional(),
+  needsApproval: z.boolean().optional(),
+  blockedBy: z.array(z.string()).optional()
+});
+
+const updateTaskSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().optional(),
+  status: z.enum(['Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done']).optional(),
+  executionState: z.enum(['queued', 'running', 'waiting', 'idle', 'failed', 'completed']).optional(),
+  assignee: z.string().optional(),
+  priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
+  tags: z.array(z.string()).optional(),
+  planChecklist: z.array(z.string()).optional(),
+  currentStepIndex: z.number().optional(),
+  blockedReason: z.string().optional(),
+  blockedBy: z.array(z.string()).optional(),
+  estimate: z.number().optional(),
+  timeSpent: z.number().optional(),
+  dueDate: z.string().optional(),
+  needsApproval: z.boolean().optional(),
+  approvedAt: z.string().optional(),
+  approvedBy: z.string().optional()
+});
+
+const moveTaskSchema = z.object({
+  status: z.enum(['Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done'])
+});
+
+const querySchema = z.object({
+  status: z.enum(['Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done']).optional(),
+  executionState: z.enum(['queued', 'running', 'waiting', 'idle', 'failed', 'completed']).optional(),
+  assignee: z.string().optional(),
+  priority: z.string().optional(),
+  tags: z.string().optional()
+});
+
+export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
+  // GET /api/tasks - List all tasks
+  fastify.get<{
+    Querystring: z.infer<typeof querySchema>;
+  }>('/tasks', async (request: FastifyRequest<{ Querystring: z.infer<typeof querySchema> }>, reply: FastifyReply) => {
+    const { status, executionState, assignee, priority, tags } = request.query;
+
+    const tasks = await taskService.getAllTasks({
+      status,
+      executionState,
+      assignee,
+      priority,
+      tags
+    });
+
+    return { tasks };
+  });
+
+  // GET /api/tasks/:id - Get single task
+  fastify.get<{
+    Params: z.infer<typeof taskParamsSchema>;
+  }>('/tasks/:id', async (request: FastifyRequest<{ Params: z.infer<typeof taskParamsSchema> }>, reply: FastifyReply) => {
+    const task = await taskService.getTaskById(request.params.id);
+
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    return { task };
+  });
+
+  // POST /api/tasks - Create task
+  fastify.post<{
+    Body: z.infer<typeof createTaskSchema>;
+  }>('/tasks', async (request: FastifyRequest<{ Body: z.infer<typeof createTaskSchema> }>, reply: FastifyReply) => {
+    const data = createTaskSchema.parse(request.body);
+    const task = await taskService.createTask(data as CreateTaskInput);
+    return reply.status(201).send({ task });
+  });
+
+  // PATCH /api/tasks/:id - Update task
+  fastify.patch<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof updateTaskSchema>;
+  }>('/tasks/:id', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof updateTaskSchema>;
+  }>, reply: FastifyReply) => {
+    const task = await taskService.updateTask(
+      request.params.id,
+      request.body as UpdateTaskInput
+    );
+
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    return { task };
+  });
+
+  // PUT /api/tasks/:id/move - Move task between columns
+  fastify.put<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof moveTaskSchema>;
+  }>('/tasks/:id/move', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof moveTaskSchema>;
+  }>, reply: FastifyReply) => {
+    const task = await taskService.moveTask(
+      request.params.id,
+      request.body.status
+    );
+
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    return { task };
+  });
+
+  // DELETE /api/tasks/:id - Delete task
+  fastify.delete<{
+    Params: z.infer<typeof taskParamsSchema>;
+  }>('/tasks/:id', async (request: FastifyRequest<{ Params: z.infer<typeof taskParamsSchema> }>, reply: FastifyReply) => {
+    const deleted = await taskService.deleteTask(request.params.id, 'human');
+
+    if (!deleted) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    return reply.status(204).send();
+  });
+
+  // POST /api/tasks/:id/heartbeat - Bot heartbeat
+  fastify.post<{
+    Params: z.infer<typeof taskParamsSchema>;
+  }>('/tasks/:id/heartbeat', async (request: FastifyRequest<{ Params: z.infer<typeof taskParamsSchema> }>, reply: FastifyReply) => {
+    const task = await taskService.updateHeartbeat(request.params.id);
+
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    return { task };
+  });
+
+  // POST /api/tasks/:id/progress - Log bot progress
+  fastify.post<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: { step: string; status: 'pending' | 'running' | 'done' | 'failed' | 'skipped' };
+  }>('/tasks/:id/progress', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: { step: string; status: 'pending' | 'running' | 'done' | 'failed' | 'skipped' };
+  }>, reply: FastifyReply) => {
+    const task = await taskService.logProgress(
+      request.params.id,
+      request.body.step,
+      request.body.status
+    );
+
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    return { task };
+  });
+
+  // GET /api/board/summary - Board summary stats
+  fastify.get('/board/summary', async (_request, reply: FastifyReply) => {
+    const summary = await taskService.getBoardSummary();
+    return { summary };
+  });
+
+  // GET /api/board/columns - Tasks grouped by status
+  fastify.get('/board/columns', async (_request, reply: FastifyReply) => {
+    const columns = await taskService.getTasksByStatus();
+    return { columns };
+  });
+
+  // Dependencies endpoints
+  // GET /api/tasks/:id/dependencies
+  fastify.get<{
+    Params: z.infer<typeof taskParamsSchema>;
+  }>('/tasks/:id/dependencies', async (request: FastifyRequest<{ Params: z.infer<typeof taskParamsSchema> }>, reply: FastifyReply) => {
+    const dependencies = await taskService.getTaskDependencies(request.params.id);
+    return { dependencies };
+  });
+
+  // POST /api/tasks/:id/dependencies - Add dependency
+  fastify.post<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: { dependencyTaskId: string };
+  }>('/tasks/:id/dependencies', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: { dependencyTaskId: string };
+  }>, reply: FastifyReply) => {
+    await taskService.addTaskDependency(request.params.id, request.body.dependencyTaskId);
+    return reply.status(201).send({ success: true });
+  });
+
+  // DELETE /api/tasks/:id/dependencies/:depId - Remove dependency
+  fastify.delete<{
+    Params: z.infer<typeof taskParamsSchema> & { depId: string };
+  }>('/tasks/:id/dependencies/:depId', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema> & { depId: string };
+  }>, reply: FastifyReply) => {
+    await taskService.removeTaskDependency(request.params.id, request.params.depId);
+    return reply.status(204).send();
+  });
+
+  // PUT /api/tasks/:id/execution - Update execution state
+  const executionStateSchema = z.object({
+    executionState: z.enum(['queued', 'running', 'waiting', 'idle', 'failed', 'completed'])
+  });
+
+  fastify.put<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof executionStateSchema>;
+  }>('/tasks/:id/execution', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof executionStateSchema>;
+  }>, reply: FastifyReply) => {
+    const { executionState } = executionStateSchema.parse(request.body);
+    
+    // Get current task for audit
+    const currentTask = await taskService.getTaskById(request.params.id);
+    if (!currentTask) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    const task = await taskService.updateTask(request.params.id, {
+      executionState,
+      lastActionAt: new Date().toISOString()
+    });
+
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    return { task };
+  });
+
+  // Bot Runs endpoints
+  // GET /api/tasks/:id/runs - Get bot runs for a task
+  fastify.get<{
+    Params: z.infer<typeof taskParamsSchema>;
+  }>('/tasks/:id/runs', async (request: FastifyRequest<{ Params: z.infer<typeof taskParamsSchema> }>, reply: FastifyReply) => {
+    const runs = await taskService.getBotRunsForTask(request.params.id);
+    return { runs };
+  });
+
+  // POST /api/tasks/:id/runs - Create a new bot run
+  fastify.post<{
+    Params: z.infer<typeof taskParamsSchema>;
+  }>('/tasks/:id/runs', async (request: FastifyRequest<{ Params: z.infer<typeof taskParamsSchema> }>, reply: FastifyReply) => {
+    const { attemptNumber, parentRunId } = request.body as { attemptNumber?: number; parentRunId?: string };
+    const run = await taskService.createBotRun(request.params.id, attemptNumber, parentRunId);
+    return reply.status(201).send(run);
+  });
+
+  // DELETE /api/tasks/clear-demo - Clear all demo tasks (dev only)
+  fastify.delete('/tasks/clear-demo', async (_request, reply: FastifyReply) => {
+    try {
+      // Delete in correct order due to foreign key constraints
+      await prisma.taskProgressLogEntry.deleteMany({});
+      await prisma.auditLogEntry.deleteMany({});
+      await prisma.botRun.deleteMany({});
+      const result = await prisma.task.deleteMany({});
+      return { deleted: result.count };
+    } catch (error) {
+      console.error('Failed to clear demo data:', error);
+      return reply.status(500).send({ error: 'Failed to clear demo data' });
+    }
+  });
+}

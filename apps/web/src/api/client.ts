@@ -1,0 +1,90 @@
+import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState } from '../shared-types';
+
+const API_BASE = '/api/v1';
+
+async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || 'Request failed');
+  }
+
+  return response.json();
+}
+
+export const api = {
+  async getTasks(filters?: {
+    status?: TaskStatus;
+    assignee?: string;
+    priority?: string;
+    tags?: string;
+  }): Promise<{ tasks: Task[] }> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.assignee) params.append('assignee', filters.assignee);
+    if (filters?.priority) params.append('priority', filters.priority);
+    if (filters?.tags) params.append('tags', filters.tags);
+
+    const url = `${API_BASE}/tasks${params.toString() ? `?${params.toString()}` : ''}`;
+    return fetchJson(url);
+  },
+
+  async getTask(id: string): Promise<{ task: Task }> {
+    return fetchJson(`${API_BASE}/tasks/${id}`);
+  },
+
+  async createTask(input: CreateTaskInput): Promise<{ task: Task }> {
+    return fetchJson(`${API_BASE}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify(input)
+    });
+  },
+
+  async updateTask(id: string, input: UpdateTaskInput): Promise<{ task: Task }> {
+    return fetchJson(`${API_BASE}/tasks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input)
+    });
+  },
+
+  async updateTaskExecution(id: string, executionState: ExecutionState): Promise<{ task: Task }> {
+    return fetchJson(`${API_BASE}/tasks/${id}/execution`, {
+      method: 'PUT',
+      body: JSON.stringify({ executionState })
+    });
+  },
+
+  async moveTask(id: string, status: TaskStatus): Promise<{ task: Task }> {
+    return fetchJson(`${API_BASE}/tasks/${id}/move`, {
+      method: 'PUT',
+      body: JSON.stringify({ status })
+    });
+  },
+
+  async deleteTask(id: string): Promise<void> {
+    await fetchJson(`${API_BASE}/tasks/${id}`, {
+      method: 'DELETE'
+    });
+  },
+
+  async getTaskEvents(id: string): Promise<{ events: unknown[] }> {
+    return fetchJson(`${API_BASE}/tasks/${id}/events`);
+  },
+
+  async getBoardSummary(): Promise<{ summary: { tasksThisWeek: number; inProgress: number; total: number; completionPercent: number; runningBots: number; idleTasks: number; blockedTasks: number } }> {
+    return fetchJson(`${API_BASE}/board/summary`);
+  },
+
+  async clearDemoData(): Promise<{ deleted: number }> {
+    return fetchJson(`${API_BASE}/tasks/clear-demo`, {
+      method: 'DELETE'
+    });
+  }
+};

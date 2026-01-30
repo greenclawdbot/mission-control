@@ -1,0 +1,139 @@
+// ============================================
+// Task Status Enum
+// ============================================
+export type TaskStatus = 
+  | 'Backlog' 
+  | 'Ready' 
+  | 'InProgress' 
+  | 'Blocked' 
+  | 'Review' 
+  | 'Done';
+
+export const TASK_STATUSES: TaskStatus[] = [
+  'Backlog',
+  'Ready', 
+  'InProgress',
+  'Blocked',
+  'Review',
+  'Done'
+];
+
+// ============================================
+// Priority Enum
+// ============================================
+export type Priority = 'Low' | 'Medium' | 'High' | 'Critical';
+
+export const PRIORITIES: Priority[] = ['Low', 'Medium', 'High', 'Critical'];
+
+// ============================================
+// Task Interface
+// ============================================
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  assignee?: string;
+  priority: Priority;
+  tags: string[];
+  
+  // Bot Observability
+  planChecklist: string[];
+  currentStepIndex: number;
+  progressLog: ProgressLogEntry[];
+  blockedReason?: string;
+  lastActionAt?: string;
+  
+  // Time Tracking
+  estimate?: number;
+  timeSpent: number;
+  
+  // Dates
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  dueDate?: string;
+}
+
+// ============================================
+// Progress Log Entry
+// ============================================
+export interface ProgressLogEntry {
+  id: string;
+  step: string;
+  completedAt: string;
+}
+
+// ============================================
+// Audit Event Interface
+// ============================================
+export interface AuditEvent {
+  id: string;
+  eventType: string;
+  entityType: 'Task';
+  entityId: string;
+  actor: 'human' | 'clawdbot';
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  timestamp: string;
+}
+
+// ============================================
+// API Types
+// ============================================
+export interface CreateTaskInput {
+  title: string;
+  description?: string;
+  assignee?: string;
+  priority?: Priority;
+  tags?: string[];
+  estimate?: number;
+  dueDate?: string;
+  planChecklist?: string[];
+}
+
+export interface UpdateTaskInput {
+  title?: string;
+  description?: string;
+  status?: TaskStatus;
+  assignee?: string;
+  priority?: Priority;
+  tags?: string[];
+  planChecklist?: string[];
+  currentStepIndex?: number;
+  blockedReason?: string;
+  estimate?: number;
+  timeSpent?: number;
+  dueDate?: string;
+}
+
+export interface MoveTaskInput {
+  status: TaskStatus;
+}
+
+export interface TaskFilters {
+  status?: TaskStatus;
+  assignee?: string;
+  priority?: Priority;
+  tags?: string[];
+}
+
+// ============================================
+// Board Summary
+// ============================================
+export interface BoardSummary {
+  tasksThisWeek: number;
+  inProgress: number;
+  total: number;
+  completionPercent: number;
+}
+
+// ============================================
+// Column with Tasks
+// ============================================
+export interface Column {
+  status: TaskStatus;
+  tasks: Task[];
+  taskCount: number;
+}

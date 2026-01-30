@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: mission-control-db
+    environment:
+      POSTGRES_USER: mission_control
+      POSTGRES_PASSWORD: mission_control_secret
+      POSTGRES_DB: mission_control
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mission_control -d mission_control"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: mission-control-api
+    environment:
+      DATABASE_URL: postgresql://mission_control:mission_control_secret@db:5432/mission_control
+      PORT: 3000
+      NODE_ENV: production
+      WEBHOOK_URL: http://host.docker.internal:8080/api/webhooks/mission-control
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: mission-control-web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
