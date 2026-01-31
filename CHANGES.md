@@ -107,6 +107,17 @@
 - [ ] ESC closes drawer
 - [ ] Click outside closes drawer
 
+## 7. App.tsx - Moved New Task Button to Left Side
+**File:** `apps/web/src/App.tsx`
+
+**Changes:**
+- ✅ Moved "+ New Task" button from right side to left side of toolbar
+- ✅ Updated toolbar flex layout to place button before filters area
+
+**Commit:** `8550676` - Move New Task button to left side of toolbar
+
+**Task:** Moved to Review status with commit info
+
 ## Known Issues (Pre-existing)
 
 - TypeScript errors in API and shared packages (not affecting web app)
