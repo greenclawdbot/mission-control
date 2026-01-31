@@ -33,6 +33,11 @@ interface ContextMessage {
 export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: TaskDrawerProps) {
   const [task, setTask] = useState(initialTask);
   const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'results' | 'runs' | 'activity'>('details');
+  
+  // Sync local state when initialTask changes (e.g., clicking different card)
+  useEffect(() => {
+    setTask(initialTask);
+  }, [initialTask.id]);
   const [editing, setEditing] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [auditEvents, setAuditEvents] = useState<unknown[]>([]);
