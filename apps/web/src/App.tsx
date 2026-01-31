@@ -8,6 +8,9 @@ import { NewTaskModal } from './components/NewTaskModal';
 import { api } from './api/client';
 import { useSSE } from './hooks/useSSE';
 
+// Manual override state type: undefined = use auto-behavior, true = collapsed, false = expanded
+type CollapseOverride = boolean | undefined;
+
 function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -16,6 +19,15 @@ function App() {
   const [animatingTasks, setAnimatingTasks] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const [systemUpdatedTasks, setSystemUpdatedTasks] = useState<Set<string>>(new Set());
+  
+  // Track manual collapse overrides for each column (undefined = auto)
+  const [collapsedColumns, setCollapsedColumns] = useState<Record<TaskStatus, CollapseOverride>>(() => {
+    const initial: Record<TaskStatus, CollapseOverride> = {} as Record<TaskStatus, CollapseOverride>;
+    TASK_STATUSES.forEach(status => {
+      initial[status] = undefined; // Start with auto behavior
+    });
+    return initial;
+  });
 
   // Fetch tasks
   const fetchTasks = useCallback(async () => {
@@ -140,10 +152,30 @@ function App() {
     setSelectedTask(null);
   };
 
+  // Toggle column collapse/expand
+  const toggleColumnCollapse = useCallback((status: TaskStatus) => {
+    setCollapsedColumns(prev => ({
+      ...prev,
+      [status]: !prev[status] // Toggle: if undefined/true -> false, if false -> true
+    }));
+  }, []);
+
+  // Determine if a column should be collapsed
+  const isColumnCollapsed = useCallback((status: TaskStatus, taskCount: number): boolean => {
+    const override = collapsedColumns[status];
+    if (override !== undefined) {
+      // Manual override exists, respect it
+      return override;
+    }
+    // No override: auto-collapse when empty
+    return taskCount === 0;
+  }, [collapsedColumns]);
+
   // Group tasks by status
   const columns = TASK_STATUSES.map(status => ({
     status,
-    tasks: tasks.filter(t => t.status === status)
+    tasks: tasks.filter(t => t.status === status),
+    isCollapsed: isColumnCollapsed(status, tasks.filter(t => t.status === status).length)
   }));
 
   if (loading) {
@@ -241,8 +273,10 @@ function App() {
                     tasks={column.tasks}
                     onTaskClick={setSelectedTask}
                     selectedTask={selectedTask}
-                     animatingTasks={animatingTasks}
-                     systemUpdatedTasks={systemUpdatedTasks}
+                    animatingTasks={animatingTasks}
+                    systemUpdatedTasks={systemUpdatedTasks}
+                    isCollapsed={column.isCollapsed}
+                    onToggleCollapse={() => toggleColumnCollapse(column.status)}
                   />
                 ))}
               </div>
@@ -285,7 +319,9 @@ function Column({
   onTaskClick,
   selectedTask,
   animatingTasks,
-  systemUpdatedTasks
+  systemUpdatedTasks,
+  isCollapsed,
+  onToggleCollapse
 }: { 
   status: TaskStatus; 
   tasks: Task[];
@@ -293,6 +329,8 @@ function Column({
   selectedTask: Task | null;
   animatingTasks: Set<string>;
   systemUpdatedTasks: Set<string>;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
@@ -307,50 +345,149 @@ function Column({
 
   const config = statusColors[status];
 
+  // Collapsed column styles
+  const collapsedWidth = 64;
+  const expandedWidth = 280;
+
   return (
     <div 
       ref={setNodeRef}
-      className="kanban-column"
+      className={`kanban-column ${isOver ? 'is-over' : ''} ${isCollapsed ? 'collapsed' : ''}`}
       style={{
-        width: '280px',
+        width: isCollapsed ? collapsedWidth : expandedWidth,
         flexShrink: 0,
-        opacity: isOver ? 0.8 : 1
+        transition: 'width 0.2s ease',
+        opacity: isOver && !isCollapsed ? 0.8 : 1
       }}
     >
-      <div className="kanban-column-header">
-        <span style={{ color: config.color }}>
-          {config.label}
-        </span>
-        <span style={{
-          background: 'var(--bg-tertiary)',
-          padding: '2px 8px',
-          borderRadius: '12px',
-          fontSize: '12px',
-          color: 'var(--text-secondary)'
-        }}>
-          {tasks.length}
-        </span>
-      </div>
-      
-      <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {tasks.length === 0 ? (
-          <div className="empty-state">
-            <p style={{ margin: 0, fontSize: '13px' }}>No tasks</p>
+      {isCollapsed ? (
+        // Collapsed state: vertical header
+        <div 
+          className="kanban-column-header collapsed"
+          onClick={onToggleCollapse}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && onToggleCollapse()}
+          aria-label={`Expand ${config.label} column`}
+          style={{
+            height: '100%',
+            minHeight: '400px',
+            padding: '12px 8px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            cursor: 'pointer',
+            borderBottom: 'none'
+          }}
+        >
+          {/* Count at top */}
+          <span style={{
+            background: 'var(--bg-tertiary)',
+            padding: '4px 8px',
+            borderRadius: '10px',
+            fontSize: '11px',
+            color: 'var(--text-secondary)',
+            marginBottom: '12px',
+            flexShrink: 0
+          }}>
+            ({tasks.length})
+          </span>
+          
+          {/* Vertical title */}
+          <span style={{
+            color: config.color,
+            fontWeight: 600,
+            fontSize: '13px',
+            writingMode: 'vertical-rl',
+            textOrientation: 'mixed',
+            transform: 'rotate(180deg)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxHeight: '280px',
+            flex: 1
+          }}>
+            {config.label}
+          </span>
+          
+          {/* Chevron indicator */}
+          <ChevronIcon style={{ marginTop: '12px', flexShrink: 0 }} />
+        </div>
+      ) : (
+        // Expanded state: normal layout
+        <>
+          <div className="kanban-column-header">
+            <button
+              onClick={onToggleCollapse}
+              className="collapse-toggle"
+              aria-label={`Collapse ${config.label} column`}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '4px',
+                marginRight: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                color: 'var(--text-secondary)'
+              }}
+            >
+              <ChevronIcon collapsed style={{ transition: 'transform 0.2s' }} />
+            </button>
+            <span style={{ color: config.color }}>
+              {config.label}
+            </span>
+            <span style={{
+              background: 'var(--bg-tertiary)',
+              padding: '2px 8px',
+              borderRadius: '12px',
+              fontSize: '12px',
+              color: 'var(--text-secondary)'
+            }}>
+              {tasks.length}
+            </span>
           </div>
-        ) : (
-          tasks.map(task => (
-            <TaskCard 
-              key={task.id} 
-              task={task}
-              onClick={() => onTaskClick(task)}
-              isSelected={selectedTask?.id === task.id}
-              isAnimating={animatingTasks.has(task.id)}
-              isSystemUpdated={systemUpdatedTasks.has(task.id)}
-            />
-          ))
-        )}
-      </div>
+          
+          <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {tasks.length === 0 ? (
+              <div className="empty-state">
+                <p style={{ margin: 0, fontSize: '13px' }}>No tasks</p>
+              </div>
+            ) : (
+              tasks.map(task => (
+                <TaskCard 
+                  key={task.id} 
+                  task={task}
+                  onClick={() => onTaskClick(task)}
+                  isSelected={selectedTask?.id === task.id}
+                  isAnimating={animatingTasks.has(task.id)}
+                  isSystemUpdated={systemUpdatedTasks.has(task.id)}
+                />
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+// Chevron icon component
+function ChevronIcon({ collapsed = false, style }: { collapsed?: boolean; style?: React.CSSProperties }) {
+  return (
+    <svg 
+      width="16" 
+      height="16" 
+      viewBox="0 0 16 16" 
+      fill="currentColor"
+      style={{
+        ...style,
+        transform: collapsed ? 'rotate(-90deg)' : 'rotate(90deg)',
+        transition: 'transform 0.2s ease'
+      }}
+    >
+      <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
   );
 }
 
