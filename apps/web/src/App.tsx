@@ -330,6 +330,8 @@ function Column({
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
   const statusColors: Record<TaskStatus, { color: string; label: string }> = {
+    New: { color: 'var(--accent-blue)', label: 'New' },
+    Planning: { color: 'var(--accent-purple)', label: 'Planning' },
     Backlog: { color: 'var(--text-secondary)', label: 'Backlog' },
     Ready: { color: 'var(--accent-blue)', label: 'Ready' },
     InProgress: { color: 'var(--accent-purple)', label: 'In Progress' },
