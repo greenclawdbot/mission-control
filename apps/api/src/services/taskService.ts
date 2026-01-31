@@ -448,6 +448,7 @@ export function mapPrismaTaskToTask(task: {
   commits: any;
   sessionKey: string | null;
   sessionLockedAt: Date | null;
+  currentStateStartedAt: Date | null;
 }): Task {
   return {
     id: task.id,
@@ -483,7 +484,8 @@ export function mapPrismaTaskToTask(task: {
     results: task.results || undefined,
     commits: task.commits || undefined,
     sessionKey: task.sessionKey,
-    sessionLockedAt: task.sessionLockedAt?.toISOString()
+    sessionLockedAt: task.sessionLockedAt?.toISOString(),
+    currentStateStartedAt: task.currentStateStartedAt?.toISOString()
   };
 }
 
