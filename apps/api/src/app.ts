@@ -13,7 +13,7 @@ const __dirname = path.dirname(__filename);
 
 export async function buildApp() {
   const fastify = Fastify({
-    logger: true
+    logger: false  // Use custom logging
   });
 
   // CORS

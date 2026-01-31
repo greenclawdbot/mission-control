@@ -1,11 +1,9 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
 import * as taskService from '../services/taskService';
-import { Task, TaskStatus, ExecutionState, CreateTaskInput, UpdateTaskInput } from '../../../shared/src/types';
+import prisma from '../db/client';
+import { Task, TaskStatus, ExecutionState, CreateTaskInput, UpdateTaskInput } from '../../shared/src/types';
 import { emitTaskEvent } from '../sseServer';
-
-const prisma = new PrismaClient();
 
 const taskParamsSchema = z.object({
   id: z.string().uuid()
