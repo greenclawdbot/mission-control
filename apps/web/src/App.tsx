@@ -42,7 +42,13 @@ function App() {
     
     switch (event.type) {
       case 'task:created':
-        setTasks(prev => [event.data, ...prev]);
+        // Only add task if it doesn't already exist (prevent duplicates from SSE when task was just created locally)
+        setTasks(prev => {
+          if (prev.some(t => t.id === event.data.id)) {
+            return prev; // Task already exists, skip
+          }
+          return [event.data, ...prev];
+        });
         // Animate new task only if not dragging
         if (!isDragging) {
           setSystemUpdatedTasks(prev => new Set([...prev, event.data.id]));
