@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { taskRoutes } from './routes/tasks';
 import { auditRoutes } from './routes/audit';
+import * as githubRoutes from './routes/github';
 import { emitTaskEvent, emitRunEvent } from './sseServer';
 
 const __filename = fileURLToPath(import.meta.url);

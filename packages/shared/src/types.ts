@@ -44,9 +44,42 @@ export interface Task {
   blockedReason?: string;
   lastActionAt?: string;
   
+  // GitHub Repository Integration
+  github_repo?: {
+    name: string;
+    owner: string;
+    description?: string;
+    private: boolean;
+    language: string;
+    default_branch: string;
+    clone_url: string;
+    ssh_url?: string;
+    issue_number?: number;
+    html_url?: string;
+  };
+  github_issue?: {
+    number: number;
+    state: string;
+    html_url?: string;
+  };
+  github_commit?: {
+    sha: string;
+    message: string;
+    author: {
+      name: string;
+      email: string;
+    };
+    added: string[];
+    modified: string[];
+    removed: string[];
+    committed_at: string;
+  };
+  
+  // AI Planning
+  systemPrompt?: string;        // System prompt override for this task
+  planningModel?: string;       // Which AI model to use for planning
+  
   // Time Tracking
-  estimate?: number;
-  timeSpent: number;
   
   // Dates
   createdAt: string;
