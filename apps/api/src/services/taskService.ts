@@ -92,8 +92,10 @@ export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawd
     after: task
   });
 
-  // Emit SSE event
-  emitTaskEvent('task:created', mapPrismaTaskToTask(task));
+  // NOTE: We do NOT emit SSE event here for task:created
+  // The client that creates the task will add it to state directly from the HTTP response.
+  // This prevents the duplicate task issue where the creating client receives its own event.
+  // SSE is only used for real-time updates from OTHER clients.
 
   // Trigger webhook if assigned to clawdbot
   if (task.assignee === 'clawdbot') {

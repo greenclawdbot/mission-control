@@ -344,8 +344,12 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
       }
     });
 
+    // Emit SSE event so clients know the task was claimed
+    const mappedTask = taskService.mapPrismaTaskToTask(updatedTask);
+    emitTaskEvent('task:updated', mappedTask);
+
     return { 
-      task: taskService.mapPrismaTaskToTask(updatedTask),
+      task: mappedTask,
       claimedAt: updatedTask.sessionLockedAt
     };
   });
@@ -384,6 +388,12 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
         sessionLockedAt: null
       }
     });
+
+    // Emit SSE event so clients know the task was released
+    const task = await prisma.task.findUnique({ where: { id: taskId } });
+    if (task) {
+      emitTaskEvent('task:updated', taskService.mapPrismaTaskToTask(task));
+    }
 
     return { released: true };
   });
