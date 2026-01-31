@@ -13,7 +13,6 @@ function App() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [clearingDemo, setClearingDemo] = useState(false);
 
   // Fetch tasks
   const fetchTasks = useCallback(async () => {
@@ -88,24 +87,6 @@ function App() {
     setSelectedTask(null);
   };
 
-  // Handle clear demo data
-  const handleClearDemoData = async () => {
-    if (!confirm('Are you sure you want to delete all demo tasks? This cannot be undone.')) {
-      return;
-    }
-    
-    setClearingDemo(true);
-    try {
-      await api.clearDemoData();
-      await fetchTasks(); // Refresh the board
-    } catch (error) {
-      console.error('Failed to clear demo data:', error);
-      alert('Failed to clear demo data');
-    } finally {
-      setClearingDemo(false);
-    }
-  };
-
   // Group tasks by status
   const columns = TASK_STATUSES.map(status => ({
     status,
@@ -148,16 +129,6 @@ function App() {
             🚀 Mission Control
           </h1>
           <div style={{ display: 'flex', gap: '8px' }}>
-            {tasks.length > 0 && (
-              <button 
-                className="btn btn-sm"
-                onClick={handleClearDemoData}
-                disabled={clearingDemo}
-                style={{ color: 'var(--accent-red)' }}
-              >
-                {clearingDemo ? 'Clearing...' : 'Clear Demo Data'}
-              </button>
-            )}
             <button 
               className="btn btn-primary btn-sm"
               onClick={() => setShowNewTask(true)}
