@@ -25,7 +25,7 @@ const createTaskSchema = z.object({
 const updateTaskSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
-  status: z.enum(['Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done']).optional(),
+  status: z.enum(['New', 'Planning', 'Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done']).optional(),
   executionState: z.enum(['queued', 'running', 'waiting', 'idle', 'failed', 'completed']).optional(),
   assignee: z.string().optional(),
   sessionKey: z.string().nullable().optional(),
@@ -51,11 +51,11 @@ const updateTaskSchema = z.object({
 });
 
 const moveTaskSchema = z.object({
-  status: z.enum(['Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done'])
+  status: z.enum(['New', 'Planning', 'Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done'])
 });
 
 const querySchema = z.object({
-  status: z.enum(['Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done']).optional(),
+  status: z.enum(['New', 'Planning', 'Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done']).optional(),
   executionState: z.enum(['queued', 'running', 'waiting', 'idle', 'failed', 'completed']).optional(),
   assignee: z.string().optional(),
   priority: z.string().optional(),

@@ -6,6 +6,8 @@ import { emitTaskEvent, emitRunEvent } from '../app';
 import { EXECUTION_STATES } from '../routes/tasks';
 
 export const TASK_STATUSES: TaskStatus[] = [
+  'New',
+  'Planning',
   'Backlog',
   'Ready',
   'InProgress',
@@ -551,6 +553,8 @@ export async function getTasksByStatus(): Promise<Record<TaskStatus, Task[]>> {
   const tasks = await getAllTasks();
   
   const result: Record<TaskStatus, Task[]> = {
+    New: [],
+    Planning: [],
     Backlog: [],
     Ready: [],
     InProgress: [],

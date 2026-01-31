@@ -2,6 +2,8 @@
 // Task Status Enum
 // ============================================
 export type TaskStatus = 
+  | 'New' 
+  | 'Planning'
   | 'Backlog' 
   | 'Ready' 
   | 'InProgress' 
@@ -10,6 +12,8 @@ export type TaskStatus =
   | 'Done';
 
 export const TASK_STATUSES: TaskStatus[] = [
+  'New',
+  'Planning',
   'Backlog',
   'Ready', 
   'InProgress',
