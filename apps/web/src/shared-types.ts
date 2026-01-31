@@ -9,6 +9,7 @@ export type TaskStatus =
   | 'InProgress' 
   | 'Blocked' 
   | 'Review' 
+  | 'Failed'
   | 'Done';
 
 export const TASK_STATUSES: TaskStatus[] = [
@@ -19,6 +20,7 @@ export const TASK_STATUSES: TaskStatus[] = [
   'InProgress',
   'Blocked',
   'Review',
+  'Failed',
   'Done'
 ];
 

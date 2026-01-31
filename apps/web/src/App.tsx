@@ -337,6 +337,7 @@ function Column({
     InProgress: { color: 'var(--accent-purple)', label: 'In Progress' },
     Blocked: { color: 'var(--accent-red)', label: 'Blocked' },
     Review: { color: 'var(--accent-orange)', label: 'Review' },
+    Failed: { color: 'var(--accent-red)', label: 'Failed' },
     Done: { color: 'var(--accent-green)', label: 'Done' }
   };
 
