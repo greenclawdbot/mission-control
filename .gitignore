@@ -39,3 +39,17 @@ prisma/migrations/
 # Generated
 coverage/
 .nyc_output/
+
+# packages/shared build output (from tsc)
+packages/shared/src/*.js
+packages/shared/src/*.d.ts
+packages/shared/src/*.js.map
+packages/shared/src/*.d.ts.map
+
+# Ad-hoc API test scripts
+apps/api/src/test-api.mjs
+apps/api/src/test-api2.mjs
+apps/api/src/test-api3.mjs
+
+# Symlink at repo root (points to packages/shared); remove this line if you want to commit it
+/shared

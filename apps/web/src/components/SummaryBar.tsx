@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Task } from '../shared-types';
 
 interface SummaryBarProps {
@@ -6,9 +6,45 @@ interface SummaryBarProps {
   nextCheck: Date | null;
 }
 
-// Countdown timer component
+// Countdown timer component with adaptive average
 function CountdownTimer({ targetDate }: { targetDate: Date | null }) {
   const [timeLeft, setTimeLeft] = useState<string>('--:--');
+  const [avgInterval, setAvgInterval] = useState<number | null>(null);
+  const pollTimestamps = useRef<number[]>([]);
+
+  useEffect(() => {
+    // Load historical poll timestamps from localStorage
+    const stored = localStorage.getItem('pollTimestamps');
+    if (stored) {
+      try {
+        pollTimestamps.current = JSON.parse(stored);
+      } catch (e) {}
+    }
+
+    // Track when we receive a new targetDate (happens on each poll)
+    if (targetDate) {
+      const now = Date.now();
+      pollTimestamps.current.push(now);
+      
+      // Keep only last 10 poll timestamps
+      if (pollTimestamps.current.length > 10) {
+        pollTimestamps.current.shift();
+      }
+      
+      // Calculate average interval
+      if (pollTimestamps.current.length >= 2) {
+        const intervals: number[] = [];
+        for (let i = 1; i < pollTimestamps.current.length; i++) {
+          intervals.push(pollTimestamps.current[i] - pollTimestamps.current[i-1]);
+        }
+        const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+        setAvgInterval(Math.round(avg / 1000)); // Convert to seconds
+      }
+      
+      // Persist to localStorage
+      localStorage.setItem('pollTimestamps', JSON.stringify(pollTimestamps.current));
+    }
+  }, [targetDate?.toISOString()]);
 
   useEffect(() => {
     if (!targetDate) {
@@ -39,7 +75,16 @@ function CountdownTimer({ targetDate }: { targetDate: Date | null }) {
     return () => clearInterval(interval);
   }, [targetDate]);
 
-  return <span>{timeLeft}</span>;
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+      <span>{timeLeft}</span>
+      {avgInterval && (
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          (avg: {avgInterval}s)
+        </span>
+      )}
+    </div>
+  );
 }
 
 export function SummaryBar({ tasks, nextCheck }: SummaryBarProps) {
