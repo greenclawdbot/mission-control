@@ -175,18 +175,34 @@ function App() {
           <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 600 }}>
             🚀 Mission Control
           </h1>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button 
-              className="btn btn-primary btn-sm"
-              onClick={() => setShowNewTask(true)}
-            >
-              + New Task
-            </button>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            {/* Reserved for: Account/Login, Settings, Help */}
           </div>
         </header>
 
         {/* Summary Bar */}
         <SummaryBar tasks={tasks} />
+
+        {/* Kanban Toolbar */}
+        <div style={{
+          padding: '12px 24px',
+          background: 'var(--bg-secondary)',
+          borderBottom: '1px solid var(--border-color)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexShrink: 0
+        }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {/* Future filters will go here */}
+          </div>
+          <button 
+            className="btn btn-primary btn-sm"
+            onClick={() => setShowNewTask(true)}
+          >
+            + New Task
+          </button>
+        </div>
 
         {/* Split-pane content area */}
         <div className="content-area" style={{
