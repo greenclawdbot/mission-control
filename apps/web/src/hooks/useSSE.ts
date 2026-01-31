@@ -11,10 +11,17 @@ interface TaskEvent {
   timestamp: string;
 }
 
+interface SystemPulseEvent {
+  type: 'system:pulse';
+  timestamp: string;
+  nextCheck: string;
+}
+
 interface SSEEvent {
   type: string;
   data?: unknown;
   timestamp?: string;
+  nextCheck?: string;
 }
 
 // ============================================
@@ -23,6 +30,7 @@ interface SSEEvent {
 
 export function useSSE(onTaskEvent?: (event: { type: string; data: Task }) => void) {
   const [connected, setConnected] = useState(false);
+  const [nextCheck, setNextCheck] = useState<Date | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -60,6 +68,11 @@ export function useSSE(onTaskEvent?: (event: { type: string; data: Task }) => vo
         // Handle task events - data.type is like 'task:updated', 'task:created', 'task:deleted'
         if (onTaskEvent && data.type && data.type.startsWith('task:')) {
           onTaskEvent({ type: data.type, data: data.data });
+        }
+        
+        // Handle system pulse events for countdown timer
+        if (data.type === 'system:pulse' && data.nextCheck) {
+          setNextCheck(new Date(data.nextCheck));
         }
       } catch (error) {
         console.error('[SSE] Parse error:', error);
@@ -103,7 +116,7 @@ export function useSSE(onTaskEvent?: (event: { type: string; data: Task }) => vo
     };
   }, [connect]);
 
-  return { connected };
+  return { connected, nextCheck };
 }
 
 // ============================================

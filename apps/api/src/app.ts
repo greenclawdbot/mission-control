@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { taskRoutes } from './routes/tasks';
 import { auditRoutes } from './routes/audit';
-import { addSSEClient, removeSSEClient, emitTaskEvent, emitRunEvent } from './sseServer';
+import { addSSEClient, removeSSEClient, emitTaskEvent, emitRunEvent, emitPulseEvent, startPulseEmitter } from './sseServer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,6 +70,9 @@ export async function buildApp() {
     });
     return { sent: true };
   });
+
+  // Start the pulse emitter for countdown timer
+  startPulseEmitter(emitPulseEvent);
 
   // Serve static files
   const webDistPath = path.join(__dirname, '../../web/dist');

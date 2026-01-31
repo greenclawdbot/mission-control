@@ -81,7 +81,7 @@ function App() {
     }
   }, [isDragging]);
 
-  const { connected } = useSSE(handleSSEEvent);
+  const { connected, nextCheck } = useSSE(handleSSEEvent);
 
   // Handle drag start
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -187,7 +187,7 @@ function App() {
         </header>
 
         {/* Summary Bar */}
-        <SummaryBar tasks={tasks} />
+        <SummaryBar tasks={tasks} nextCheck={nextCheck} />
 
         {/* Kanban Toolbar */}
         <div style={{
