@@ -9,7 +9,7 @@ interface SummaryBarProps {
 // Countdown timer component with adaptive average
 function CountdownTimer({ targetDate }: { targetDate: Date | null }) {
   const [timeLeft, setTimeLeft] = useState<string>('--:--');
-  const [avgInterval, setAvgInterval] = useState<number | null>(null);
+  const [avgInterval, setAvgInterval] = useState<number>(30000); // Default 30s
   const pollTimestamps = useRef<number[]>([]);
 
   useEffect(() => {
@@ -21,7 +21,7 @@ function CountdownTimer({ targetDate }: { targetDate: Date | null }) {
       } catch (e) {}
     }
 
-    // Track when we receive a new targetDate (happens on each poll)
+    // Track when we receive a new targetDate (happens on each pulse)
     if (targetDate) {
       const now = Date.now();
       pollTimestamps.current.push(now);
@@ -38,7 +38,7 @@ function CountdownTimer({ targetDate }: { targetDate: Date | null }) {
           intervals.push(pollTimestamps.current[i] - pollTimestamps.current[i-1]);
         }
         const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-        setAvgInterval(Math.round(avg / 1000)); // Convert to seconds
+        setAvgInterval(Math.round(avg)); // Keep in ms
       }
       
       // Persist to localStorage
@@ -53,18 +53,17 @@ function CountdownTimer({ targetDate }: { targetDate: Date | null }) {
     }
 
     const updateTimer = () => {
-      const now = new Date().getTime();
-      const target = targetDate.getTime();
-      const diff = target - now;
-
-      if (diff <= 0) {
+      const now = Date.now();
+      // Count down from the average poll interval, not from targetDate
+      const diff = avgInterval - (now % avgInterval);
+      
+      if (diff <= 0 || diff > avgInterval) {
         setTimeLeft('0:00');
         return;
       }
 
-      const minutes = Math.floor(diff / 60000);
-      const seconds = Math.floor((diff % 60000) / 1000);
-      setTimeLeft(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+      const seconds = Math.floor(diff / 1000);
+      setTimeLeft(`0:${seconds.toString().padStart(2, '0')}`);
     };
 
     // Update immediately
@@ -73,16 +72,14 @@ function CountdownTimer({ targetDate }: { targetDate: Date | null }) {
     // Then update every second
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [targetDate]);
+  }, [avgInterval, targetDate]);
 
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
       <span>{timeLeft}</span>
-      {avgInterval && (
-        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-          (avg: {avgInterval}s)
-        </span>
-      )}
+      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+        (avg: {Math.round(avgInterval / 1000)}s)
+      </span>
     </div>
   );
 }
