@@ -2,7 +2,7 @@ import prisma from '../db/client';
 import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, ProgressLogEntry } from '../../../shared/src/types';
 import { emitAuditEvent } from './auditService';
 import { triggerWebhook } from './webhookService';
-// import { emitTaskEvent, emitRunEvent } from '../app'; // TEMP: disabled for stability
+import { emitTaskEvent, emitRunEvent } from '../app';
 import { EXECUTION_STATES } from '../routes/tasks';
 
 export const TASK_STATUSES: TaskStatus[] = [
@@ -92,8 +92,8 @@ export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawd
     after: task
   });
 
-  // Emit WebSocket event
-  // emitTaskEvent('task:created', mapPrismaTaskToTask(task));
+  // Emit SSE event
+  emitTaskEvent('task:created', mapPrismaTaskToTask(task));
 
   // Trigger webhook if assigned to clawdbot
   if (task.assignee === 'clawdbot') {
@@ -149,6 +149,8 @@ export async function updateTask(id: string, input: UpdateTaskInput, actor: 'hum
   if (input.needsApproval !== undefined) updateData.needsApproval = input.needsApproval;
   if (input.approvedAt !== undefined) updateData.approvedAt = input.approvedAt ? new Date(input.approvedAt) : null;
   if (input.approvedBy !== undefined) updateData.approvedBy = input.approvedBy;
+  if (input.results !== undefined) updateData.results = input.results;
+  if (input.commits !== undefined) updateData.commits = input.commits;
 
   updateData.lastActionAt = new Date();
 
@@ -172,8 +174,8 @@ export async function updateTask(id: string, input: UpdateTaskInput, actor: 'hum
     after: mapPrismaTaskToTask(task)
   });
 
-  // Emit WebSocket event
-  // emitTaskEvent('task:updated', mapPrismaTaskToTask(task));
+  // Emit SSE event
+  emitTaskEvent('task:updated', mapPrismaTaskToTask(task));
 
   // Trigger webhook if assigned to clawdbot
   if (task.assignee === 'clawdbot') {
@@ -184,7 +186,12 @@ export async function updateTask(id: string, input: UpdateTaskInput, actor: 'hum
 }
 
 export async function moveTask(id: string, status: TaskStatus, actor: 'human' | 'clawdbot' = 'human'): Promise<Task | null> {
-  return updateTask(id, { status }, actor);
+  // When moving to Review or Done, also set executionState to completed
+  const updates: UpdateTaskInput = { status };
+  if (status === 'Review' || status === 'Done') {
+    updates.executionState = 'completed';
+  }
+  return updateTask(id, updates, actor);
 }
 
 export async function deleteTask(id: string, actor: 'human' | 'clawdbot' = 'human'): Promise<boolean> {
@@ -217,8 +224,8 @@ export async function deleteTask(id: string, actor: 'human' | 'clawdbot' = 'huma
       before
     });
 
-    // Emit WebSocket event
-    // emitTaskEvent('task:deleted', before);
+    // Emit SSE event
+    emitTaskEvent('task:deleted', before);
 
     return true;
   } catch (error) {
@@ -352,6 +359,10 @@ export function mapPrismaTaskToTask(task: {
   startedAt: Date | null;
   completedAt: Date | null;
   dueDate: Date | null;
+  results: string | null;
+  commits: any;
+  sessionKey: string | null;
+  sessionLockedAt: Date | null;
 }): Task {
   return {
     id: task.id,
@@ -383,7 +394,11 @@ export function mapPrismaTaskToTask(task: {
     updatedAt: task.updatedAt.toISOString(),
     startedAt: task.startedAt?.toISOString(),
     completedAt: task.completedAt?.toISOString(),
-    dueDate: task.dueDate?.toISOString()
+    dueDate: task.dueDate?.toISOString(),
+    results: task.results || undefined,
+    commits: task.commits || undefined,
+    sessionKey: task.sessionKey,
+    sessionLockedAt: task.sessionLockedAt?.toISOString()
   };
 }
 

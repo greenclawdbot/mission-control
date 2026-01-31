@@ -14,27 +14,27 @@ export function getDefaultPrompt(taskTitle: string, customPrompt?: string): stri
   // Try to detect task type based on title keywords
   const lowerTitle = taskTitle.toLowerCase();
   
-  if (lowerTitle.includes('\''implement'') || lowerTitle.includes('\''create'') || lowerTitle.includes('\''build'') || lowerTitle.includes('\''setup'')) {
+  if (lowerTitle.includes('implement') || lowerTitle.includes('create') || lowerTitle.includes('build') || lowerTitle.includes('setup')) {
     return customPrompt || DEFAULT_PROMPTS.coding;
   }
   
-  if (lowerTitle.includes('\''research'') || lowerTitle.includes('\''analyze'') || lowerTitle.includes('\''investigate'') || lowerTitle.includes('\''study'')) {
+  if (lowerTitle.includes('research') || lowerTitle.includes('analyze') || lowerTitle.includes('investigate') || lowerTitle.includes('study')) {
     return customPrompt || DEFAULT_PROMPTS.research;
   }
   
-  if (lowerTitle.includes('\''document'') || lowerTitle.includes('\''doc'') || lowerTitle.includes('\''guide'') || lowerTitle.includes('\''manual'')) {
+  if (lowerTitle.includes('document') || lowerTitle.includes('doc') || lowerTitle.includes('guide') || lowerTitle.includes('manual')) {
     return customPrompt || DEFAULT_PROMPTS.documentation;
   }
   
-  if (lowerTitle.includes('\''debug'') || lowerTitle.includes('\''fix'') || lowerTitle.includes('\''issue'') || lowerTitle.includes('\''error'')) {
+  if (lowerTitle.includes('debug') || lowerTitle.includes('fix') || lowerTitle.includes('issue') || lowerTitle.includes('error')) {
     return customPrompt || DEFAULT_PROMPTS.debugging;
   }
   
-  if (lowerTitle.includes('\''deploy'') || lowerTitle.includes('\''release'') || lowerTitle.includes('\''production'')) {
+  if (lowerTitle.includes('deploy') || lowerTitle.includes('release') || lowerTitle.includes('production')) {
     return customPrompt || DEFAULT_PROMPTS.deployment;
   }
   
-  if (lowerTitle.includes('\''review'') || lowerTitle.includes('\''code'') || lowerTitle.includes('\''test'')) {
+  if (lowerTitle.includes('review') || lowerTitle.includes('code') || lowerTitle.includes('test')) {
     return customPrompt || DEFAULT_PROMPTS.review;
   }
   

@@ -8,7 +8,7 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: `http://localhost:${process.env.API_PORT || 3001}`,
+        target: 'http://192.168.1.84:3001',
         changeOrigin: true,
         secure: false,
         configure: (proxy, _options) => {
@@ -30,7 +30,7 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: `http://localhost:${process.env.API_PORT || 3001}`,
+        target: 'http://192.168.1.84:3001',
         changeOrigin: true,
         secure: false,
         configure: (proxy, _options) => {

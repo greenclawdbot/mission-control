@@ -23,7 +23,7 @@ interface BotRun {
 
 export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: TaskDrawerProps) {
   const [task, setTask] = useState(initialTask);
-  const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'runs' | 'activity'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'results' | 'runs' | 'activity'>('details');
   const [editing, setEditing] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [auditEvents, setAuditEvents] = useState<unknown[]>([]);
@@ -325,7 +325,7 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
         borderBottom: '1px solid var(--border-color)',
         padding: '0 20px'
       }}>
-        {(['details', 'plan', 'runs', 'activity'] as const).map(tab => (
+        {(['details', 'plan', 'results', 'runs', 'activity'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -632,6 +632,95 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'results' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Work Results */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                WORK RESULTS
+              </label>
+              {task.results ? (
+                <div 
+                  className="markdown-content"
+                  style={{
+                    background: 'var(--bg-secondary)',
+                    padding: '16px',
+                    borderRadius: '8px'
+                  }}
+                  dangerouslySetInnerHTML={{ __html: marked.parse(task.results) }}
+                />
+              ) : (
+                <div style={{
+                  background: 'var(--bg-secondary)',
+                  padding: '24px',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  color: 'var(--text-secondary)'
+                }}>
+                  No results recorded yet. Results are added when work is completed.
+                </div>
+              )}
+            </div>
+
+            {/* Git Commits */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                GIT COMMITS ({task.commits?.length || 0})
+              </label>
+              {task.commits && task.commits.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {task.commits.map((commit, index) => (
+                    <div key={index} style={{
+                      background: 'var(--bg-secondary)',
+                      padding: '12px',
+                      borderRadius: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <span style={{
+                          background: 'var(--accent-green)',
+                          color: 'white',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontSize: '10px',
+                          fontFamily: 'monospace'
+                        }}>
+                          {commit.sha.slice(0, 7)}
+                        </span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                          {formatDate(commit.timestamp)}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '13px', marginBottom: '6px' }}>
+                        {commit.message}
+                      </div>
+                      {commit.url && (
+                        <a 
+                          href={commit.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{ fontSize: '12px', color: 'var(--accent-blue)' }}
+                        >
+                          View on GitHub →
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{
+                  background: 'var(--bg-secondary)',
+                  padding: '24px',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  color: 'var(--text-secondary)'
+                }}>
+                  No commits recorded. Git commits are added when code is pushed.
+                </div>
+              )}
+            </div>
           </div>
         )}
 

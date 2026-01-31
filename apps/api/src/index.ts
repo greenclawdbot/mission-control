@@ -1,7 +1,15 @@
 import { buildApp } from './app';
 import { createWriteStream } from 'fs';
 import { mkdir } from 'fs/promises';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { config } from 'dotenv';
+
+// Load .env file from project root
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const projectRoot = join(__dirname, '..', '..');
+config({ path: join(projectRoot, '.env') });
 
 const PORT = parseInt(process.env.API_PORT || process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';

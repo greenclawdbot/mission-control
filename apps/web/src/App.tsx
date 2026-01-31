@@ -32,7 +32,23 @@ function App() {
   }, [fetchTasks]);
 
   // SSE connection for live updates
-  useSSE();
+  const handleSSEEvent = useCallback((event: { type: string; data: Task }) => {
+    console.log('[App] SSE Event:', event.type, event.data);
+    
+    switch (event.type) {
+      case 'task:created':
+        setTasks(prev => [event.data, ...prev]);
+        break;
+      case 'task:updated':
+        setTasks(prev => prev.map(t => t.id === event.data.id ? event.data : t));
+        break;
+      case 'task:deleted':
+        setTasks(prev => prev.filter(t => t.id !== event.data.id));
+        break;
+    }
+  }, []);
+
+  const { connected } = useSSE(handleSSEEvent);
 
   // Handle drag end
   const handleDragEnd = async (event: DragEndEvent) => {

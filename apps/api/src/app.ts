@@ -1,13 +1,11 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
-import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { taskRoutes } from './routes/tasks';
 import { auditRoutes } from './routes/audit';
-import * as githubRoutes from './routes/github';
-import { emitTaskEvent, emitRunEvent } from './sseServer';
+import { addSSEClient, removeSSEClient, emitTaskEvent, emitRunEvent } from './sseServer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,6 +30,25 @@ export async function buildApp() {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
+  // SSE endpoint
+  fastify.get('/api/v1/events', (request, reply) => {
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+
+    // Send connection message
+    const clientId = addSSEClient(reply.raw);
+    reply.raw.write(`data: ${JSON.stringify({ type: 'connected', clientId, timestamp: new Date().toISOString() })}\n\n`);
+
+    // Handle disconnect
+    request.raw.on('close', () => {
+      removeSSEClient(clientId);
+    });
+  });
+
   // Test event endpoint
   fastify.post('/api/v1/test-event', async () => {
     emitTaskEvent('task:updated', {
@@ -54,7 +71,7 @@ export async function buildApp() {
     return { sent: true };
   });
 
-  // Serve static files from web/dist
+  // Serve static files
   const webDistPath = path.join(__dirname, '../../web/dist');
   
   await fastify.register(fastifyStatic, {
@@ -73,6 +90,7 @@ export async function buildApp() {
   return fastify;
 }
 
-// Export for use in taskService
+// Export for use in other modules
 export { emitTaskEvent, emitRunEvent };
+export { addSSEClient, removeSSEClient, getClientCount } from './sseServer';
 

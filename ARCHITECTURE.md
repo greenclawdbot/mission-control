@@ -26,6 +26,59 @@ A Mission Control–style project management web app for managing Clawdbot's wor
                     └────────────────┘
 ```
 
+---
+
+## 📋 Backlog / Feature Ideas
+
+### 🔮 Persona System (Planned)
+Multiple personas for Clawdbot that appear as separate Discord users:
+
+**Core Concept:**
+- Single Clawdbot backend with multiple persona instances
+- Each persona appears as a distinct Discord user (different avatar, name)
+- DM each persona separately or add to different channels
+- Each persona has its own personality, memory, and skill set
+
+**Example Personas:**
+| Persona | Name | Color | Purpose |
+|---------|------|-------|---------|
+| greendoc | GreenDoc | 🟢 | Health & medical assistant |
+| zorkmaster | ZorkMaster | 🟤 | Text adventure gaming |
+| theclaw | The Claw | 🦀 | General assistant & kanban |
+| codemaster | CodeMaster | 🔵 | Programming help |
+
+**Technical Implementation:**
+1. **Persona config file** (YAML/JSON):
+   ```yaml
+   personas:
+     - id: greendoc
+       name: "GreenDoc"
+       discordUsername: "greendoc"
+       avatar: "/avatars/greendoc.png"
+       color: "#00FF00"
+       systemPrompt: "You are a caring medical and health assistant..."
+       skills: [health-tracker, weather, food]
+       
+     - id: zorkmaster
+       name: "ZorkMaster"
+       discordUsername: "zorkmaster" 
+       avatar: "/avatars/zork.png"
+       color: "#8B4513"
+       systemPrompt: "You are a text adventure game master..."
+       skills: [zork-discord, gaming]
+   ```
+
+2. **Discord Integration:**
+   - Multiple Discord bot clients (one per persona)
+   - Or single bot using channel-based persona switching
+   - Each persona responds to its own username/mentions
+
+3. **Memory Isolation:**
+   - Each persona has separate memory file
+   - Context doesn't bleed between personas
+
+**Priority:** Medium - Core enhancement for multi-context conversations
+
 ## Communication Patterns
 
 1. **Heartbeat Polling** (every ~30s):

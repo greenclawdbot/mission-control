@@ -76,6 +76,15 @@ export interface Task {
   approvedAt?: string;
   approvedBy?: string;
   
+  // Work Output (for auditability + review)
+  results?: string;  // Markdown summary of work done
+  commits?: Array<{
+    sha: string;
+    message: string;
+    url: string;
+    timestamp: string;
+  }>;
+  
   // Dates
   createdAt: string;
   updatedAt: string;
@@ -175,6 +184,13 @@ export interface UpdateTaskInput {
   needsApproval?: boolean;
   approvedAt?: string;
   approvedBy?: string;
+  results?: string;
+  commits?: Array<{
+    sha: string;
+    message: string;
+    url: string;
+    timestamp: string;
+  }>;
 }
 
 export interface MoveTaskInput {

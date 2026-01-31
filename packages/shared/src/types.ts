@@ -44,6 +44,10 @@ export interface Task {
   blockedReason?: string;
   lastActionAt?: string;
   
+  // Session Binding (for bot autonomy + crash recovery)
+  sessionKey?: string | null;
+  sessionLockedAt?: string | null;
+  
   // GitHub Repository Integration
   github_repo?: {
     name: string;
@@ -80,6 +84,17 @@ export interface Task {
   planningModel?: string;       // Which AI model to use for planning
   
   // Time Tracking
+  estimate?: number;
+  timeSpent: number;
+  
+  // Work Output (for auditability + review)
+  results?: string;  // Markdown summary of work done
+  commits?: Array<{
+    sha: string;
+    message: string;
+    url: string;
+    timestamp: string;
+  }>;
   
   // Dates
   createdAt: string;
@@ -131,6 +146,7 @@ export interface UpdateTaskInput {
   description?: string;
   status?: TaskStatus;
   assignee?: string;
+  sessionKey?: string | null;
   priority?: Priority;
   tags?: string[];
   planChecklist?: string[];
@@ -139,6 +155,13 @@ export interface UpdateTaskInput {
   estimate?: number;
   timeSpent?: number;
   dueDate?: string;
+  results?: string;
+  commits?: Array<{
+    sha: string;
+    message: string;
+    url: string;
+    timestamp: string;
+  }>;
 }
 
 export interface MoveTaskInput {

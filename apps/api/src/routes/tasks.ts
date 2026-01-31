@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import * as taskService from '../services/taskService';
 import { Task, TaskStatus, ExecutionState, CreateTaskInput, UpdateTaskInput } from '../../../shared/src/types';
+import { emitTaskEvent } from '../sseServer';
 
 const prisma = new PrismaClient();
 
@@ -29,6 +30,7 @@ const updateTaskSchema = z.object({
   status: z.enum(['Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done']).optional(),
   executionState: z.enum(['queued', 'running', 'waiting', 'idle', 'failed', 'completed']).optional(),
   assignee: z.string().optional(),
+  sessionKey: z.string().nullable().optional(),
   priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
   tags: z.array(z.string()).optional(),
   planChecklist: z.array(z.string()).optional(),
@@ -40,7 +42,14 @@ const updateTaskSchema = z.object({
   dueDate: z.string().optional(),
   needsApproval: z.boolean().optional(),
   approvedAt: z.string().optional(),
-  approvedBy: z.string().optional()
+  approvedBy: z.string().optional(),
+  results: z.string().optional(),
+  commits: z.array(z.object({
+    sha: z.string(),
+    message: z.string(),
+    url: z.string().optional(),
+    timestamp: z.string()
+  })).optional()
 });
 
 const moveTaskSchema = z.object({
@@ -458,13 +467,76 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
         }
       });
 
+      // Emit SSE event for real-time updates
+      const mappedTask = taskService.mapPrismaTaskToTask(updatedTask);
+      try {
+        emitTaskEvent('task:updated', mappedTask);
+      } catch (err) {
+        console.error('SSE emit error:', err);
+      }
+
       return { 
-        task: taskService.mapPrismaTaskToTask(updatedTask),
+        task: mappedTask,
         action: 'claimed'
       };
     }
 
     // No ready tasks, return null
+    return { task: null, action: 'none' };
+  });
+
+  // GET /api/tasks/orphaned - Find InProgress tasks without active session
+  const orphanedQuerySchema = z.object({
+    sessionKey: z.string().min(1),
+    assignee: z.string().default('clawdbot')
+  });
+
+  fastify.get<{
+    Querystring: z.infer<typeof orphanedQuerySchema>;
+  }>('/tasks/orphaned', async (request: FastifyRequest<{
+    Querystring: z.infer<typeof orphanedQuerySchema>;
+  }>, reply: FastifyReply) => {
+    const { sessionKey, assignee } = orphanedQuerySchema.parse(request.query);
+
+    // Find InProgress tasks that have no sessionKey (orphaned)
+    let task = await prisma.task.findFirst({
+      where: {
+        assignee,
+        status: 'InProgress',
+        sessionKey: null  // No active session
+      },
+      orderBy: { updatedAt: 'asc' }
+    });
+
+    if (task) {
+      // Atomically claim it
+      const updatedTask = await prisma.task.update({
+        where: { id: task.id },
+        data: {
+          sessionKey,
+          sessionLockedAt: new Date()
+        },
+        include: {
+          progressLog: {
+            orderBy: { completedAt: 'desc' }
+          }
+        }
+      });
+
+      // Emit SSE event for real-time updates
+      const mappedTask = taskService.mapPrismaTaskToTask(updatedTask);
+      try {
+        emitTaskEvent('task:updated', mappedTask);
+      } catch (err) {
+        console.error('SSE emit error:', err);
+      }
+
+      return { 
+        task: mappedTask,
+        action: 'claimed'
+      };
+    }
+
     return { task: null, action: 'none' };
   });
 }

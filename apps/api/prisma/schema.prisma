@@ -48,6 +48,10 @@ model Task {
   sessionKey      String?   // Clawdbot session holding this task
   sessionLockedAt DateTime? // When lock was acquired (for stale detection)
   
+  // Work Output (for auditability + review)
+  results      String?  @db.Text  // Markdown summary of work done
+  commits      Json?    // Array of {sha, message, url, timestamp}
+  
   // Dates
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

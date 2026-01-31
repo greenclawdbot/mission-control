@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Task } from '../shared-types';
 
 // ============================================
@@ -21,29 +21,46 @@ interface SSEEvent {
 // SSE Hook
 // ============================================
 
-export function useSSE() {
+export function useSSE(onTaskEvent?: (event: { type: string; data: Task }) => void) {
   const [connected, setConnected] = useState(false);
-  const [eventSource, setEventSource] = useState<EventSource | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const connect = useCallback(() => {
     if (typeof window === 'undefined') return;
 
-    // Close existing connection
-    if (eventSource) {
-      eventSource.close();
+    // Close any existing connection
+    if (eventSourceRef.current) {
+      try {
+        eventSourceRef.current.close();
+      } catch (e) {
+        // Ignore
+      }
     }
 
-    const es = new EventSource('/api/v1/events');
-    
+    const sseUrl = (import.meta.env?.VITE_API_URL || '') + '/api/v1/events' || '/api/v1/events';
+    const es = new EventSource(sseUrl);
+    eventSourceRef.current = es;
+
     es.onopen = () => {
       console.log('[SSE] Connected');
       setConnected(true);
+      // Clear reconnect timeout if connected
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
     };
 
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         console.log('[SSE] Received:', data);
+        
+        // Handle task events - data.type is like 'task:updated', 'task:created', 'task:deleted'
+        if (onTaskEvent && data.type && data.type.startsWith('task:')) {
+          onTaskEvent({ type: data.type, data: data.data });
+        }
       } catch (error) {
         console.error('[SSE] Parse error:', error);
       }
@@ -52,31 +69,41 @@ export function useSSE() {
     es.onerror = (error) => {
       console.error('[SSE] Error:', error);
       setConnected(false);
-      // Auto-reconnect after delay
-      setTimeout(() => {
-        if (!connected) {
+      
+      // Only reconnect if the connection was previously open
+      // and we haven't already scheduled a reconnect
+      if (es.readyState === EventSource.CLOSED && !reconnectTimeoutRef.current) {
+        console.log('[SSE] Scheduling reconnect in 5s...');
+        reconnectTimeoutRef.current = setTimeout(() => {
+          console.log('[SSE] Reconnecting...');
+          reconnectTimeoutRef.current = null;
           connect();
-        }
-      }, 5000);
+        }, 5000);
+      }
     };
 
-    setEventSource(es);
-
-    return () => {
-      es.close();
-    };
-  }, [eventSource, connected]);
+    return es;
+  }, []);
 
   useEffect(() => {
-    const cleanup = connect();
+    const es = connect();
+    
     return () => {
-      if (typeof cleanup === 'function') {
-        cleanup();
+      // Cleanup on unmount
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (es && es.close) {
+        try {
+          es.close();
+        } catch (e) {
+          // Ignore
+        }
       }
     };
   }, [connect]);
 
-  return { connected, connect };
+  return { connected };
 }
 
 // ============================================
