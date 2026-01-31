@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core';
 import { Task, TaskStatus, TASK_STATUSES } from './shared-types';
 import { TaskCard } from './components/TaskCard';
@@ -16,6 +16,10 @@ function App() {
   const [animatingTasks, setAnimatingTasks] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const [systemUpdatedTasks, setSystemUpdatedTasks] = useState<Set<string>>(new Set());
+  
+  // Track recently created task IDs to prevent SSE duplicates
+  // SSE events may arrive before state updates, so we need to track locally
+  const recentlyCreatedTaskIds = useRef<Set<string>>(new Set());
 
   // Fetch tasks
   const fetchTasks = useCallback(async () => {
@@ -42,7 +46,14 @@ function App() {
     
     switch (event.type) {
       case 'task:created':
-        // Only add task if it doesn't already exist (prevent duplicates from SSE when task was just created locally)
+        // Skip if we just created this task locally (SSE event is our own echo)
+        if (recentlyCreatedTaskIds.current.has(event.data.id)) {
+          // Clear from ref and skip - the local state already has it
+          recentlyCreatedTaskIds.current.delete(event.data.id);
+          return;
+        }
+        
+        // Only add task if it doesn't already exist
         setTasks(prev => {
           if (prev.some(t => t.id === event.data.id)) {
             return prev; // Task already exists, skip
@@ -265,6 +276,8 @@ function App() {
           <NewTaskModal
             onClose={() => setShowNewTask(false)}
             onCreated={(task) => {
+              // Track this task ID to ignore SSE echo
+              recentlyCreatedTaskIds.current.add(task.id);
               setTasks(prev => [task, ...prev]);
               setShowNewTask(false);
             }}
