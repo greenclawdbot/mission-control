@@ -6,7 +6,8 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      // Only set Content-Type for requests with body
+      ...(options?.body && { 'Content-Type': 'application/json' }),
       ...options?.headers
     }
   });
@@ -14,6 +15,11 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Request failed' }));
     throw new Error(error.error || 'Request failed');
+  }
+
+  // Handle 204 No Content responses (DELETE operations)
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json();
@@ -69,7 +75,7 @@ export const api = {
   },
 
   async deleteTask(id: string): Promise<void> {
-    await fetchJson(`${API_BASE}/tasks/${id}`, {
+    await fetchJson<void>(`${API_BASE}/tasks/${id}`, {
       method: 'DELETE'
     });
   },
