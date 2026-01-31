@@ -44,24 +44,45 @@ async function main() {
     originalError.apply(console, args);
   };
 
-  // Prevent silent crashes
+  // Prevent silent crashes - write directly to stderr for crash reports
   process.on('uncaughtException', (err) => {
-    console.error('UNCAUGHT EXCEPTION:', err);
+    console.error('FATAL UNCAUGHT EXCEPTION:', err.message);
+    console.error(err.stack);
+    process.stderr.write(`FATAL: ${err.message}\n${err.stack}\n`);
     process.exit(1);
   });
   
   process.on('unhandledRejection', (reason) => {
-    console.error('UNHANDLED REJECTION:', reason);
+    console.error('FATAL UNHANDLED REJECTION:', reason);
+    process.stderr.write(`FATAL REJECTION: ${reason}\n`);
     process.exit(1);
   });
 
+  // Watchdog - if no heartbeat in 90s, restart
+  let lastActivity = Date.now();
+  setInterval(() => {
+    if (Date.now() - lastActivity > 90000) {
+      console.error('WATCHDOG: No activity for 90s, restarting...');
+      process.stderr.write(`WATCHDOG: No activity for 90s, restarting...\n`);
+      process.exit(1);
+    }
+  }, 30000);
+
+  function markActivity() {
+    lastActivity = Date.now();
+  }
+
   const app = await buildApp();
+
+  // Wrap routes to track activity
+  app.addHook('onRequest', markActivity);
 
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`🚀 Mission Control API running on http://${HOST}:${PORT}`);
     console.log(`📋 API docs at http://${HOST}:${PORT}/api/v1`);
     console.log(`📝 Logs at ${LOG_DIR}`);
+    console.log(`🐕 Watchdog active - will restart if no activity for 90s`);
   } catch (err) {
     console.error('Failed to start server:', err);
     process.exit(1);
