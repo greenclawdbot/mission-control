@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Background circle -->
+  <circle cx="16" cy="16" r="15" fill="#1a1a2e" stroke="#00d4ff" stroke-width="2"/>
+  
+  <!-- Inner radar/command circle -->
+  <circle cx="16" cy="16" r="10" fill="none" stroke="#00d4ff" stroke-width="1" opacity="0.6"/>
+  
+  <!-- Center dot -->
+  <circle cx="16" cy="16" r="3" fill="#00d4ff"/>
+  
+  <!-- Signal indicator lines (top, right, bottom, left) -->
+  <line x1="16" y1="4" x2="16" y2="8" stroke="#00d4ff" stroke-width="2" stroke-linecap="round"/>
+  <line x1="28" y1="16" x2="24" y2="16" stroke="#00d4ff" stroke-width="2" stroke-linecap="round"/>
+  <line x1="16" y1="28" x2="16" y2="24" stroke="#00d4ff" stroke-width="2" stroke-linecap="round"/>
+  <line x1="4" y1="16" x2="8" y2="16" stroke="#00d4ff" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Small accent dots -->
+  <circle cx="16" cy="6" r="1" fill="#00ff88"/>
+  <circle cx="26" cy="16" r="1" fill="#00ff88"/>
+  <circle cx="16" cy="26" r="1" fill="#00ff88"/>
+  <circle cx="6" cy="16" r="1" fill="#00ff88"/>
+</svg>
