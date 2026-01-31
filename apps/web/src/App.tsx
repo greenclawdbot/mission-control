@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { DndContext, DragEndEvent, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core';
 import { Task, TaskStatus, TASK_STATUSES } from './shared-types';
 import { TaskCard } from './components/TaskCard';
 import { TaskDrawer } from './components/TaskDrawer';
@@ -14,6 +14,8 @@ function App() {
   const [showNewTask, setShowNewTask] = useState(false);
   const [loading, setLoading] = useState(true);
   const [animatingTasks, setAnimatingTasks] = useState<Set<string>>(new Set());
+  const [isDragging, setIsDragging] = useState(false);
+  const [systemUpdatedTasks, setSystemUpdatedTasks] = useState<Set<string>>(new Set());
 
   // Fetch tasks
   const fetchTasks = useCallback(async () => {
@@ -35,25 +37,57 @@ function App() {
   const handleSSEEvent = useCallback((event: { type: string; data: Task }) => {
     console.log('[App] SSE Event:', event.type, event.data);
     
+    // Don't animate system updates while user is dragging
+    if (isDragging) return;
+    
     switch (event.type) {
       case 'task:created':
         setTasks(prev => [event.data, ...prev]);
+        // Animate new task only if not dragging
+        if (!isDragging) {
+          setSystemUpdatedTasks(prev => new Set([...prev, event.data.id]));
+          setTimeout(() => {
+            setSystemUpdatedTasks(prev => {
+              const next = new Set(prev);
+              next.delete(event.data.id);
+              return next;
+            });
+          }, 500);
+        }
         break;
       case 'task:updated':
         setTasks(prev => prev.map(t => t.id === event.data.id ? event.data : t));
+        // Animate status change only if not dragging
+        if (!isDragging) {
+          setSystemUpdatedTasks(prev => new Set([...prev, event.data.id]));
+          setTimeout(() => {
+            setSystemUpdatedTasks(prev => {
+              const next = new Set(prev);
+              next.delete(event.data.id);
+              return next;
+            });
+          }, 500);
+        }
         break;
       case 'task:deleted':
         setTasks(prev => prev.filter(t => t.id !== event.data.id));
         break;
     }
-  }, []);
+  }, [isDragging]);
 
   const { connected } = useSSE(handleSSEEvent);
 
+  // Handle drag start
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setIsDragging(true);
+  }, []);
+
   // Handle drag end
   const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
+    setIsDragging(false);
     
+    const { active, over } = event;
+
     if (!over) return;
 
     const taskId = active.id as string;
@@ -62,7 +96,7 @@ function App() {
     const task = tasks.find(t => t.id === taskId);
     if (!task || task.status === newStatus) return;
 
-    // Add to animating tasks set to trigger animation
+    // Use minimal animation for manual drags (just to clean up visual state)
     setAnimatingTasks(prev => new Set([...prev, taskId]));
 
     // Optimistic update
@@ -70,14 +104,14 @@ function App() {
       t.id === taskId ? { ...t, status: newStatus } : t
     ));
 
-    // Remove animation class after animation completes
+    // Clean up animation state quickly for manual drags
     setTimeout(() => {
       setAnimatingTasks(prev => {
         const next = new Set(prev);
         next.delete(taskId);
         return next;
       });
-    }, 400);
+    }, 200);
 
     // API call
     try {
@@ -121,7 +155,7 @@ function App() {
   }
 
   return (
-    <DndContext onDragEnd={handleDragEnd}>
+    <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div style={{ 
         minHeight: '100vh',
         display: 'flex',
@@ -185,7 +219,8 @@ function App() {
                     tasks={column.tasks}
                     onTaskClick={setSelectedTask}
                     selectedTask={selectedTask}
-                    animatingTasks={animatingTasks}
+                     animatingTasks={animatingTasks}
+                     systemUpdatedTasks={systemUpdatedTasks}
                   />
                 ))}
               </div>
@@ -224,13 +259,15 @@ function Column({
   tasks, 
   onTaskClick,
   selectedTask,
-  animatingTasks 
+  animatingTasks,
+  systemUpdatedTasks
 }: { 
   status: TaskStatus; 
   tasks: Task[];
   onTaskClick: (task: Task) => void;
   selectedTask: Task | null;
   animatingTasks: Set<string>;
+  systemUpdatedTasks: Set<string>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
@@ -283,6 +320,7 @@ function Column({
               onClick={() => onTaskClick(task)}
               isSelected={selectedTask?.id === task.id}
               isAnimating={animatingTasks.has(task.id)}
+              isSystemUpdated={systemUpdatedTasks.has(task.id)}
             />
           ))
         )}

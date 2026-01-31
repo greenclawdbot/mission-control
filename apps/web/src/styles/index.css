@@ -70,7 +70,7 @@ body {
   border-radius: 6px;
   padding: 12px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   /* Enable GPU acceleration for smoother animations */
   transform: translateZ(0);
@@ -98,19 +98,25 @@ body {
   }
 }
 
-/* Column animation for when tasks are added/removed */
-.kanban-column .task-card {
-  animation: fadeSlideIn 0.3s ease-out;
+/* System update animation - flies cards to new position */
+.task-card.system-updated {
+  animation: systemUpdateFly 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-@keyframes fadeSlideIn {
+@keyframes systemUpdateFly {
   0% {
-    opacity: 0;
-    transform: translateY(-10px);
+    opacity: 0.7;
+    transform: scale(0.95) translateY(-8px);
+    box-shadow: 0 4px 20px rgba(88, 166, 255, 0.2);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02) translateY(-2px);
+    box-shadow: 0 8px 32px rgba(88, 166, 255, 0.3);
   }
   100% {
-    opacity: 1;
-    transform: translateY(0);
+    transform: scale(1) translateY(0);
+    box-shadow: none;
   }
 }
 
@@ -138,9 +144,9 @@ body {
   }
 }
 
-.task-card:hover {
+.task-card:hover:not(.system-updated):not(.status-changed) {
   border-color: var(--accent-blue);
-  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .task-card.selected {
