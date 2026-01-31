@@ -37,6 +37,9 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
     assignee: task.assignee || '',
     needsApproval: task.needsApproval
   });
+  
+  // Additional context state for Review items
+  const [additionalContext, setAdditionalContext] = useState('');
 
   // ESC close only
   useEffect(() => {
@@ -136,11 +139,27 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
   };
 
   const handleStatusChange = async (status: TaskStatus) => {
+    let descriptionUpdate = undefined;
+    
+    // When moving from Review with additional context, prepend it to description
+    if (task.status === 'Review' && additionalContext.trim()) {
+      const timestamp = new Date().toISOString();
+      const contextHeader = `\n\n---\n**Additional Context (${timestamp}):**\n${additionalContext.trim()}\n`;
+      descriptionUpdate = (task.description || '') + contextHeader;
+    }
+    
     optimisticUpdate({ status });
     try {
-      const response = await api.updateTask(task.id, { status });
+      const response = await api.updateTask(task.id, { 
+        status,
+        ...(descriptionUpdate && { description: descriptionUpdate })
+      });
       setTask(response.task);
       onUpdate(response.task);
+      // Clear additional context after successful move
+      if (task.status === 'Review') {
+        setAdditionalContext('');
+      }
     } catch (error) {
       console.error('Failed to update status:', error);
       const taskRes = await api.getTask(task.id);
@@ -317,6 +336,27 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
             ✅ Completed
           </span>
         )}
+
+        {/* Review-specific actions: Move back to Backlog or Ready */}
+        {task.status === 'Review' && (
+          <>
+            <div style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
+            <button 
+              className="btn btn-sm"
+              onClick={() => handleStatusChange('Backlog')}
+              title="Move back to Backlog for revision"
+            >
+              📥 Backlog
+            </button>
+            <button 
+              className="btn btn-sm"
+              onClick={() => handleStatusChange('Ready')}
+              title="Move back to Ready for bot to reprocess"
+            >
+              📋 Ready
+            </button>
+          </>
+        )}
       </div>
 
       {/* Tabs */}
@@ -487,6 +527,33 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
                 </div>
               )}
             </div>
+
+            {/* Additional Context - Only shown in Review */}
+            {task.status === 'Review' && (
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: 'var(--accent-orange)', marginBottom: '8px' }}>
+                  ADDITIONAL CONTEXT ⚠️
+                </label>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: 0, marginBottom: '8px' }}>
+                  Enter new context/messages below. These will be prepended to the description when moving back to Backlog or Ready.
+                </p>
+                <textarea
+                  className="input textarea"
+                  value={additionalContext}
+                  onChange={e => setAdditionalContext(e.target.value)}
+                  placeholder="Enter additional context, feedback, or instructions for reprocessing..."
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    borderColor: 'var(--accent-orange)',
+                    background: 'rgba(210, 153, 34, 0.05)'
+                  }}
+                />
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', textAlign: 'right' }}>
+                  {additionalContext.length} characters
+                </div>
+              </div>
+            )}
 
             {/* Tags */}
             <div>
