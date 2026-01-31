@@ -132,7 +132,7 @@ export async function getTaskById(id: string): Promise<Task | null> {
 }
 
 export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawdbot' = 'human'): Promise<Task> {
-  const status = input.status || 'Backlog';
+  const status = input.status || 'New';
   const task = await prisma.task.create({
     data: {
       title: input.title,
