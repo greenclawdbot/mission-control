@@ -5,6 +5,7 @@ import { TaskCard } from './components/TaskCard';
 import { TaskDrawer } from './components/TaskDrawer';
 import { SummaryBar } from './components/SummaryBar';
 import { NewTaskModal } from './components/NewTaskModal';
+import { ThemeToggle } from './components/ThemeToggle';
 import { api } from './api/client';
 import { useSSE } from './hooks/useSSE';
 
@@ -207,6 +208,7 @@ function App() {
             🚀 Mission Control
           </h1>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <ThemeToggle />
             {/* Reserved for: Account/Login, Settings, Help */}
           </div>
         </header>
