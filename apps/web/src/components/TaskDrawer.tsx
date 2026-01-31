@@ -25,7 +25,7 @@ interface ContextMessage {
   id: string;
   content: string;
   timestamp: string;
-  status?: TaskStatus;
+  status?: 'Completed' | 'Failed' | TaskStatus;
   attemptNumber?: number;
   runResult?: string;
 }
@@ -407,6 +407,25 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
           <span style={{ fontSize: '11px', color: 'var(--accent-green)' }}>
             ✅ Completed
           </span>
+        )}
+
+        {/* Quick Move to Ready - Touch-friendly alternative to drag-drop */}
+        {task.status !== 'Ready' && (
+          <>
+            <div style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
+            <button 
+              className="btn btn-sm"
+              onClick={() => handleStatusChange('Ready')}
+              title="Move to Ready (touch-friendly)"
+              style={{
+                background: 'var(--accent-blue)',
+                color: 'white',
+                borderColor: 'var(--accent-blue)'
+              }}
+            >
+              📋 Move to Ready
+            </button>
+          </>
         )}
       </div>
 

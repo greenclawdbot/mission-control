@@ -11,6 +11,9 @@ import { addSSEClient, removeSSEClient, emitTaskEvent, emitRunEvent, emitPulseEv
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Calculate project root (up from apps/api to mission-control)
+const projectRoot = path.resolve(__dirname, '..', '..');
+
 export async function buildApp() {
   const fastify = Fastify({
     logger: false  // Use custom logging
@@ -76,8 +79,8 @@ export async function buildApp() {
   // Start the pulse emitter for countdown timer
   startPulseEmitter(emitPulseEvent);
 
-  // Serve static files
-  const webDistPath = path.join(__dirname, '../../web/dist');
+  // Serve static files from web/dist
+  const webDistPath = path.join(projectRoot, 'apps', 'web', 'dist');
   
   await fastify.register(fastifyStatic, {
     root: webDistPath,

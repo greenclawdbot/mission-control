@@ -160,23 +160,16 @@ function App() {
     }));
   }, []);
 
-  // Determine if a column should be collapsed
-  const isColumnCollapsed = useCallback((status: TaskStatus, taskCount: number): boolean => {
+  // Group tasks by status - inline collapse logic to avoid stale closures
+  const columns = TASK_STATUSES.map(status => {
+    const columnTasks = tasks.filter(t => t.status === status);
     const override = collapsedColumns[status];
-    if (override !== undefined) {
-      // Manual override exists, respect it
-      return override;
-    }
-    // No override: auto-collapse when empty
-    return taskCount === 0;
-  }, [collapsedColumns]);
-
-  // Group tasks by status
-  const columns = TASK_STATUSES.map(status => ({
-    status,
-    tasks: tasks.filter(t => t.status === status),
-    isCollapsed: isColumnCollapsed(status, tasks.filter(t => t.status === status).length)
-  }));
+    return {
+      status,
+      tasks: columnTasks,
+      isCollapsed: override !== undefined ? override : columnTasks.length === 0
+    };
+  });
 
   if (loading) {
     return (

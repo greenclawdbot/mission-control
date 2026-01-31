@@ -72,6 +72,12 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
     setClickStart(null);
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Always handle click on the card - this ensures clicking a different card
+    // updates the selection even when the sidebar is already open
+    onClick();
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -79,13 +85,7 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
       className={`task-card ${task.assignee === 'clawdbot' ? 'bot-assigned' : ''} ${task.status === 'Blocked' ? 'blocked' : ''} ${isIdleTooLong ? 'idle-too-long' : ''} ${isSelected ? 'selected' : ''} ${isAnimating ? 'status-changed' : ''} ${isSystemUpdated ? 'system-updated' : ''}`}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
-      onClick={(e) => {
-        // Double-click to open drawer
-        if (e.detail === 2) {
-          e.stopPropagation();
-          onClick();
-        }
-      }}
+      onClick={handleCardClick}
       data-task-id={task.id}
     >
       {/* Debug indicator for selected task */}
