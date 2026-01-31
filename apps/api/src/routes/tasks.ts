@@ -389,10 +389,10 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
       }
     });
 
-    // Emit SSE event so clients know the task was released
-    const task = await prisma.task.findUnique({ where: { id: taskId } });
-    if (task) {
-      emitTaskEvent('task:updated', taskService.mapPrismaTaskToTask(task));
+    // Re-fetch and emit SSE event so clients know the task was released
+    const releasedTask = await prisma.task.findUnique({ where: { id: taskId } });
+    if (releasedTask) {
+      emitTaskEvent('task:updated', taskService.mapPrismaTaskToTask(releasedTask));
     }
 
     return { released: true };
