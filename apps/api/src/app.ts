@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { taskRoutes } from './routes/tasks';
 import { auditRoutes } from './routes/audit';
+import { registerGitHubRoutes } from './routes/github';
 import { addSSEClient, removeSSEClient, emitTaskEvent, emitRunEvent, emitPulseEvent, startPulseEmitter } from './sseServer';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +25,7 @@ export async function buildApp() {
   // API Routes
   await fastify.register(taskRoutes, { prefix: '/api/v1' });
   await fastify.register(auditRoutes, { prefix: '/api/v1' });
+  await fastify.register(registerGitHubRoutes);
 
   // Health check
   fastify.get('/health', async () => {

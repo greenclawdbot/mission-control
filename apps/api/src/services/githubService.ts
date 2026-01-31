@@ -45,68 +45,8 @@ export class GitHubService {
   }
 
   async getRepoIssues(fullName: string): Promise<GitHubIssue[]> {
-    const [owner, repoName] = fullName.split('/');
-    const { stdout } = await execAsync('gh api repos/${owner}/${repoName}/issues --limit 20 --json');
-    const issues = JSON.parse(stdout);
-    return issues.map((issue: any) => ({
-      number: issue.number,
-      title: issue.title,
-      body: issue.body || '',
-      state: issue.state,
-      html_url: issue.html_url || undefined
-    }));
-  }
-
-  async createIssue(fullName: string, title: string, body: string): Promise<{ number: number; html_url: string }> {
-    const [owner, repoName] = fullName.split('/');
-    const { stdout } = await execAsync(`gh api repos/${owner}/${repoName}/issues --json --field title,field body --field state`, [
-      `--title="${title}"`,
-      `--body="${body}"`
-    ]);
-    const result = JSON.parse(stdout);
-    return {
-      number: result.number,
-      html_url: result.html_url || ''
-    };
-  }
-
-  async updateIssue(fullName: string, issueNumber: number, state: string): Promise<void> {
-    const [owner, repoName] = fullName.split('/');
-    await execAsync(`gh api repos/${owner}/${repoName}/issues/${issueNumber} --json --field state --field state=${state}`);
-  }
-
-  async addComment(fullName: string, issueNumber: number, comment: string): Promise<void> {
-    const [owner, repoName] = fullName.split('/');
-    await execAsync(`gh api repos/${owner}/${repoName}/issues/${issueNumber}/comments --json --field body --field body`, [
-      `--body="${comment}"`
-    ]);
-  }
-
-  async closeIssue(fullName: string, issueNumber: number, comment: string): Promise<void> {
-    const [owner, repoName] = fullName.split('/');
-    await execAsync(`gh api repos/${owner}/${repoName}/issues/${issueNumber} --json --field state --field state=closed --field comment --field comment`, [
-      `--comment="${comment}"`
-    ]);
-  }
-}
-
-  async getUserRepos(): Promise<GitHubRepo[]> {
-    const { stdout } = await execAsync('gh repo list --limit 50 --json');
-    const repos = JSON.parse(stdout);
-    return repos.map(repo => ({
-      name: repo.name,
-      owner: repo.owner?.login || 'unknown',
-      description: repo.description || undefined,
-      private: repo.private || false,
-      language: repo.language || undefined,
-      default_branch: repo.default_branch || 'main',
-      clone_url: repo.clone_url || '',
-      ssh_url: repo.ssh_url || undefined
-    }));
-  }
-
-  async getRepoIssues(fullName: string): Promise<GitHubIssue[]> {
-    const [owner, ...repoName] = fullName.split('/');
+    const [owner, ...repoNameParts] = fullName.split('/');
+    const repoName = repoNameParts.join('/');
     const { stdout } = await execAsync(`gh api repos/${owner}/${repoName}/issues --limit 20 --json`);
     const issues = JSON.parse(stdout);
     return issues.map((issue: any) => ({
@@ -118,12 +58,8 @@ export class GitHubService {
     }));
   }
 
-  async createIssue(fullName: string, title: string, body: string): Promise<{ number: number; html_url: string }> {
-    const [owner, repoName] = fullName.split('/');
-    const { stdout } = await execAsync(`gh api repos/${owner}/${repoName}/issues --json --field title,field body --field state`, [
-      `--title="${title}"`,
-      `--body="${body}"`
-    ]);
+  async createIssue(owner: string, repoName: string, title: string, body?: string): Promise<{ number: number; html_url: string }> {
+    const { stdout } = await execAsync(`gh api repos/${owner}/${repoName}/issues --field title="${title}" --field body="${body || ''}"`);
     const result = JSON.parse(stdout);
     return {
       number: result.number,
@@ -132,21 +68,27 @@ export class GitHubService {
   }
 
   async updateIssue(fullName: string, issueNumber: number, state: string): Promise<void> {
-    const [owner, repoName] = fullName.split('/');
-    await execAsync(`gh api repos/${owner}/${repoName}/issues/${issueNumber} --json --field state --field state=${state}`);
+    const [owner, ...repoNameParts] = fullName.split('/');
+    const repoName = repoNameParts.join('/');
+    await execAsync(`gh api repos/${owner}/${repoName}/issues/${issueNumber} --field state=${state}`);
   }
 
   async addComment(fullName: string, issueNumber: number, comment: string): Promise<void> {
-    const [owner, repoName] = fullName.split('/');
-    await execAsync(`gh api repos/${owner}/${repoName}/issues/${issueNumber}/comments --json --field body --field body`, [
-      `--body="${comment}"`
-    ]);
+    const [owner, ...repoNameParts] = fullName.split('/');
+    const repoName = repoNameParts.join('/');
+    await execAsync(`gh api repos/${owner}/${repoName}/issues/${issueNumber}/comments --field body="${comment}"`);
   }
 
-  async closeIssue(fullName: string, issueNumber: number, comment: string): Promise<void> {
-    const [owner, repoName] = fullName.split('/');
-    await execAsync(`gh api repos/${owner}/${repoName}/issues/${issueNumber} --json --field state --field state=closed --field comment --field comment`, [
-      `--comment="${comment}"`
-    ]);
+  async closeIssue(fullName: string, issueNumber: number, comment?: string): Promise<void> {
+    const [owner, ...repoNameParts] = fullName.split('/');
+    const repoName = repoNameParts.join('/');
+    await execAsync(`gh api repos/${owner}/${repoName}/issues/${issueNumber} --field state=closed`);
+    if (comment) {
+      await this.addComment(fullName, issueNumber, comment);
+    }
   }
 }
+
+// Global service instance
+const githubService = new GitHubService(process.env.GITHUB_TOKEN || '');
+export default githubService;

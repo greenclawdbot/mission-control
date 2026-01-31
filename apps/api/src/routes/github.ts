@@ -1,10 +1,22 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { Task } from '../../../packages/shared/src/types';
 import * as taskService from '../services/taskService';
+import githubService from '../services/githubService';
 
-const taskParamsSchema = z.object({
-  id: z.string().uuid()
+const createGitHubTaskSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  priority: z.enum(['Low', 'Medium', 'High']).default('Medium'),
+  planningModel: z.string().optional(),
+  github_repo: z.object({
+    name: z.string(),
+    owner: z.string()
+  }).optional()
+});
+
+const githubRepoParamsSchema = z.object({
+  owner: z.string(),
+  repo: z.string()
 });
 
 export async function registerGitHubRoutes(fastify: FastifyInstance): Promise<void> {
@@ -19,37 +31,8 @@ export async function registerGitHubRoutes(fastify: FastifyInstance): Promise<vo
     }
   });
 
-  // Webhook handler for GitHub events
-  async function handleGitHubWebhook(request: FastifyRequest, reply: FastifyReply) {
-    try {
-      const body = request.body as any;
-      console.log('GitHub webhook received:', body);
-      
-      // Handle different webhook events
-      if (body.action === 'opened' || body.action === 'reopened') {
-        // Issue opened/reopened - create or update task
-        console.log(`Processing GitHub issue: ${body.repository.name}#${body.issue.number}`);
-      } else if (body.action === 'closed') {
-        // Issue closed - update task status to Done
-        console.log(`GitHub issue closed: ${body.repository.name}#${body.issue.number}`);
-      }
-      
-      return reply.status(200).send({ received: true });
-    } catch (error) {
-      console.error('GitHub webhook error:', error);
-      return reply.status(500).send({ error: 'Webhook processing failed' });
-    }
-  }
-
-  // Register webhook route
-  fastify.post('/api/v1/github/webhook', handleGitHubWebhook);
-}
-  });
-
   // GET /api/v1/github/repos/:owner/:repo/issues - List repository issues
-  fastify.get<{ Params: z.infer<typeof taskParamsSchema> }>({
-    schema: { params: taskParamsSchema }
-  }, async (request, reply) => {
+  fastify.get<{ Params: z.infer<typeof githubRepoParamsSchema> }>('/api/v1/github/repos/:owner/:repo/issues', async (request, reply) => {
     const { owner, repo } = request.params;
     const fullName = `${owner}/${repo}`;
     
@@ -65,9 +48,7 @@ export async function registerGitHubRoutes(fastify: FastifyInstance): Promise<vo
   // POST /api/v1/github/tasks - Create task from GitHub issue
   fastify.post<{
     Body: z.infer<typeof createGitHubTaskSchema>;
-    Params: z.infer<typeof taskParamsSchema>;
-  }>('/api/v1/github/tasks/:id', async (request, reply) => {
-    const { id } = request.params;
+  }>('/api/v1/github/tasks', async (request, reply) => {
     const data = createGitHubTaskSchema.parse(request.body);
     
     try {
@@ -80,7 +61,8 @@ export async function registerGitHubRoutes(fastify: FastifyInstance): Promise<vo
       const issue = await githubService.createIssue(
         data.github_repo.owner,
         data.github_repo.name,
-        data.title
+        data.title,
+        data.description
       );
       
       // Create a task linked to that GitHub issue

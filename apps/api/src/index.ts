@@ -1,6 +1,5 @@
 import { buildApp } from './app';
-import { createWriteStream } from 'fs';
-import { mkdir } from 'fs/promises';
+import { mkdir, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from 'dotenv';
@@ -15,45 +14,61 @@ const PORT = parseInt(process.env.API_PORT || process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const LOG_DIR = join(process.cwd(), '.logs');
 
+// Use a simple log buffer that writes to file asynchronously
+const logLines: string[] = [];
+let writing = false;
+
+async function flushLogs() {
+  if (writing || logLines.length === 0) return;
+  writing = true;
+  const toWrite = logLines.splice(0, 100).join('');
+  if (toWrite) {
+    try {
+      await writeFile(logFilePath, toWrite, { flag: 'a' });
+    } catch (e) {
+      // Ignore write errors
+    }
+  }
+  writing = false;
+  if (logLines.length > 0) {
+    setImmediate(flushLogs);
+  }
+}
+
+const logFilePath = join(LOG_DIR, `api-${Date.now()}.log`);
+
+function writeLog(level: string, msg: string) {
+  const timestamp = new Date().toISOString();
+  const line = `[${timestamp}] [${level}] ${msg}\n`;
+  logLines.push(line);
+  if (logLines.length >= 10) {
+    flushLogs();
+  }
+}
+
+// Don't override console - use a logger instead
+function appLog(level: string, msg: string) {
+  writeLog(level, msg);
+  if (level === 'ERROR') {
+    process.stderr.write(`[${level}] ${msg}\n`);
+  } else {
+    process.stdout.write(`[${level}] ${msg}\n`);
+  }
+}
+
 async function main() {
   // Ensure logs directory exists
   await mkdir(LOG_DIR, { recursive: true });
-  
-  // Create log file with timestamp
-  const logFile = createWriteStream(join(LOG_DIR, `api-${Date.now()}.log`), { flags: 'a' });
-  
-  // Custom logging
-  const originalLog = console.log;
-  const originalError = console.error;
-  
-  function writeLog(level: string, msg: string) {
-    const timestamp = new Date().toISOString();
-    const line = `[${timestamp}] [${level}] ${msg}\n`;
-    logFile.write(line);
-  }
-  
-  console.log = (...args) => {
-    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-    writeLog('INFO', msg);
-    originalLog.apply(console, args);
-  };
-  
-  console.error = (...args) => {
-    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-    writeLog('ERROR', msg);
-    originalError.apply(console, args);
-  };
 
   // Prevent silent crashes - write directly to stderr for crash reports
   process.on('uncaughtException', (err) => {
-    console.error('FATAL UNCAUGHT EXCEPTION:', err.message);
-    console.error(err.stack);
+    appLog('ERROR', `FATAL UNCAUGHT EXCEPTION: ${err.message}`);
     process.stderr.write(`FATAL: ${err.message}\n${err.stack}\n`);
     process.exit(1);
   });
   
   process.on('unhandledRejection', (reason) => {
-    console.error('FATAL UNHANDLED REJECTION:', reason);
+    appLog('ERROR', `FATAL UNHANDLED REJECTION: ${String(reason)}`);
     process.stderr.write(`FATAL REJECTION: ${reason}\n`);
     process.exit(1);
   });
@@ -61,8 +76,10 @@ async function main() {
   // Watchdog - if no heartbeat in 90s, restart
   let lastActivity = Date.now();
   setInterval(() => {
-    if (Date.now() - lastActivity > 90000) {
-      console.error('WATCHDOG: No activity for 90s, restarting...');
+    const now = Date.now();
+    const inactive = now - lastActivity;
+    if (inactive > 90000) {
+      appLog('ERROR', 'WATCHDOG: No activity for 90s, restarting...');
       process.stderr.write(`WATCHDOG: No activity for 90s, restarting...\n`);
       process.exit(1);
     }
@@ -79,12 +96,12 @@ async function main() {
 
   try {
     await app.listen({ port: PORT, host: HOST });
-    console.log(`🚀 Mission Control API running on http://${HOST}:${PORT}`);
-    console.log(`📋 API docs at http://${HOST}:${PORT}/api/v1`);
-    console.log(`📝 Logs at ${LOG_DIR}`);
-    console.log(`🐕 Watchdog active - will restart if no activity for 90s`);
+    appLog('INFO', `🚀 Mission Control API running on http://${HOST}:${PORT}`);
+    appLog('INFO', `📋 API docs at http://${HOST}:${PORT}/api/v1`);
+    appLog('INFO', `📝 Logs at ${LOG_DIR}`);
+    appLog('INFO', `🐕 Watchdog active - will restart if no activity for 90s`);
   } catch (err) {
-    console.error('Failed to start server:', err);
+    appLog('ERROR', `Failed to start server: ${err}`);
     process.exit(1);
   }
 }
