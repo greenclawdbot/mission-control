@@ -13,7 +13,7 @@ interface TaskCardProps {
 export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdated }: TaskCardProps) {
   const [clickStart, setClickStart] = useState<{ x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  
+
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.id
   });
@@ -30,14 +30,15 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
   };
   const priorityClass = priorityClassMap[task.priority as keyof typeof priorityClassMap] || 'priority-medium';
 
-  const executionStateColors: Record<string, string> = {
-    queued: 'var(--text-secondary)',
-    running: 'var(--accent-green)',
-    waiting: 'var(--accent-orange)',
-    idle: 'var(--accent-orange)',
-    failed: 'var(--accent-red)',
-    completed: 'var(--accent-blue)'
+  const executionStateClassMap: Record<string, string> = {
+    queued: 'queued',
+    running: 'running',
+    waiting: 'waiting',
+    idle: 'idle',
+    failed: 'failed',
+    completed: 'completed'
   };
+  const executionStateClass = executionStateClassMap[task.executionState] || 'queued';
 
   const executionStateIcons: Record<string, string> = {
     queued: '⏳',
@@ -49,7 +50,7 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
   };
 
   // Check if idle for too long (more than 1 hour since lastActionAt)
-  const isIdleTooLong = task.executionState === 'idle' && task.lastActionAt && 
+  const isIdleTooLong = task.executionState === 'idle' && task.lastActionAt &&
     (Date.now() - new Date(task.lastActionAt).getTime()) > 60 * 60 * 1000;
 
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -58,11 +59,11 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
 
   const handlePointerUp = (e: React.PointerEvent) => {
     if (!clickStart) return;
-    
+
     const dx = Math.abs(e.clientX - clickStart.x);
     const dy = Math.abs(e.clientY - clickStart.y);
     const threshold = 5; // pixels
-    
+
     // Only trigger click if movement was minimal (not a drag)
     if (dx < threshold && dy < threshold) {
       e.stopPropagation();
@@ -89,89 +90,41 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
     >
       {/* Debug indicator for selected task */}
       {isSelected && (
-        <div style={{
-          position: 'absolute',
-          top: -20,
-          left: 0,
-          right: 0,
-          fontSize: '10px',
-          color: 'var(--accent-blue)',
-          background: 'rgba(88, 166, 255, 0.1)',
-          padding: '2px 4px',
-          borderRadius: '2px'
-        }}>
+        <div className="selected-debug-indicator">
           Selected: {task.id.slice(0, 8)}...
         </div>
       )}
 
       {/* Drag handle - only this area is draggable */}
-      <div 
-        className="drag-handle"
+      <div
+        className="task-card-header drag-handle"
         {...listeners}
         {...attributes}
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          marginBottom: '8px',
-          cursor: 'grab',
-          padding: '2px',
-          margin: '-2px -2px 8px -2px',
-          borderRadius: '4px'
-        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 500, flex: 1 }}>
+        <h3 className="task-card-title">
           {task.title}
         </h3>
         {task.assignee === 'clawdbot' && (
-          <span style={{
-            fontSize: '10px',
-            background: 'rgba(163, 113, 247, 0.2)',
-            color: 'var(--accent-purple)',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            fontWeight: 600,
-            marginLeft: '8px',
-            flexShrink: 0
-          }}>
+          <span className="bot-badge">
             🤖 BOT
           </span>
         )}
       </div>
 
       {task.description && (
-        <p style={{ 
-          margin: '0 0 8px 0', 
-          fontSize: '12px', 
-          color: 'var(--text-secondary)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap'
-        }}>
+        <p className="task-card-description">
           {task.description}
         </p>
       )}
 
       {/* Execution State Indicator */}
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: '8px',
-        marginBottom: '8px',
-        fontSize: '11px'
-      }}>
-        <span style={{ color: executionStateColors[task.executionState] || 'var(--text-secondary)' }}>
+      <div className="task-card-meta">
+        <span className={`execution-state ${executionStateClass}`}>
           {executionStateIcons[task.executionState]} {task.executionState}
         </span>
         {task.needsApproval && (
-          <span style={{
-            background: 'rgba(210, 153, 34, 0.2)',
-            color: 'var(--accent-orange)',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            fontSize: '10px'
-          }}>
+          <span className="needs-approval-badge">
             ⚠️ Needs Approval
           </span>
         )}
@@ -179,34 +132,24 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
 
       {/* Idle warning with tooltip */}
       {isIdleTooLong && (
-        <div style={{ 
-          fontSize: '11px', 
-          color: 'var(--accent-red)',
-          marginBottom: '8px'
-        }}>
+        <div className="idle-warning">
           ⚠️ Idle too long
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="task-card-footer">
         <span className={`priority-badge ${priorityClass}`}>
           {task.priority}
         </span>
-        
-        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+
+        <div className="task-tags">
           {task.tags.slice(0, 2).map(tag => (
-            <span key={tag} style={{
-              fontSize: '10px',
-              background: 'var(--bg-primary)',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              color: 'var(--text-secondary)'
-            }}>
+            <span key={tag} className="task-tag">
               {tag}
             </span>
           ))}
           {task.tags.length > 2 && (
-            <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+            <span className="task-tags-more">
               +{task.tags.length - 2}
             </span>
           )}
@@ -215,39 +158,21 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
 
       {/* Plan progress */}
       {task.status === 'InProgress' && task.planChecklist.length > 0 && (
-        <div style={{ 
-          marginTop: '8px', 
-          fontSize: '11px', 
-          color: 'var(--accent-purple)' 
-        }}>
+        <div className="plan-progress task-card-section">
           Step {task.currentStepIndex + 1} of {task.planChecklist.length}
         </div>
       )}
 
       {/* Blocked by */}
       {task.blockedBy.length > 0 && (
-        <div style={{ 
-          marginTop: '8px', 
-          fontSize: '11px', 
-          color: 'var(--accent-red)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px'
-        }}>
+        <div className="blocked-indicator task-card-section">
           🔒 Blocked by {task.blockedBy.length} task(s)
         </div>
       )}
 
       {/* Blocked reason (legacy) */}
       {task.status === 'Blocked' && task.blockedReason && !task.blockedBy.length && (
-        <div style={{ 
-          marginTop: '8px', 
-          fontSize: '11px', 
-          color: 'var(--accent-red)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px'
-        }}>
+        <div className="blocked-indicator task-card-section">
           ⚠️ {task.blockedReason}
         </div>
       )}
