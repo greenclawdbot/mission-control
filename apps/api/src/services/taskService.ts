@@ -184,22 +184,37 @@ export async function deleteTask(id: string, actor: 'human' | 'clawdbot' = 'huma
   const before = await getTaskById(id);
   if (!before) return false;
 
-  // Delete related records first (due to foreign key constraints)
-  await prisma.taskProgressLogEntry.deleteMany({ where: { taskId: id } });
-  await prisma.auditEvent.deleteMany({ where: { taskId: id } });
-  await prisma.botRun.deleteMany({ where: { taskId: id } });
+  try {
+    // Delete related records first (due to foreign key constraints)
+    await prisma.taskProgressLogEntry.deleteMany({ where: { taskId: id } });
+    await prisma.auditEvent.deleteMany({ where: { taskId: id } });
+    await prisma.botRun.deleteMany({ where: { taskId: id } });
+    
+    // Delete TaskDependency records where this task is involved
+    await prisma.taskDependency.deleteMany({ 
+      where: { 
+        OR: [
+          { dependentTaskId: id },
+          { dependencyTaskId: id }
+        ]
+      } 
+    });
 
-  await prisma.task.delete({ where: { id } });
+    await prisma.task.delete({ where: { id } });
 
-  await emitAuditEvent({
-    eventType: 'task.deleted',
-    entityType: 'Task',
-    entityId: id,
-    actor,
-    before
-  });
+    await emitAuditEvent({
+      eventType: 'task.deleted',
+      entityType: 'Task',
+      entityId: id,
+      actor,
+      before
+    });
 
-  return true;
+    return true;
+  } catch (error) {
+    console.error('Failed to delete task:', error);
+    throw error;
+  }
 }
 
 // ============================================
