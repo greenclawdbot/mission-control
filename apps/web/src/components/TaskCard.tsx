@@ -6,9 +6,10 @@ interface TaskCardProps {
   task: Task;
   onClick: () => void;
   isSelected?: boolean;
+  isAnimating?: boolean;
 }
 
-export function TaskCard({ task, onClick, isSelected }: TaskCardProps) {
+export function TaskCard({ task, onClick, isSelected, isAnimating }: TaskCardProps) {
   const [clickStart, setClickStart] = useState<{ x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   
@@ -73,7 +74,7 @@ export function TaskCard({ task, onClick, isSelected }: TaskCardProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`task-card ${task.assignee === 'clawdbot' ? 'bot-assigned' : ''} ${task.status === 'Blocked' ? 'blocked' : ''} ${isIdleTooLong ? 'idle-too-long' : ''} ${isSelected ? 'selected' : ''}`}
+      className={`task-card ${task.assignee === 'clawdbot' ? 'bot-assigned' : ''} ${task.status === 'Blocked' ? 'blocked' : ''} ${isIdleTooLong ? 'idle-too-long' : ''} ${isSelected ? 'selected' : ''} ${isAnimating ? 'status-changed' : ''}`}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onClick={(e) => {

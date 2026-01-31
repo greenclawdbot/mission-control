@@ -13,6 +13,7 @@ function App() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [animatingTasks, setAnimatingTasks] = useState<Set<string>>(new Set());
 
   // Fetch tasks
   const fetchTasks = useCallback(async () => {
@@ -61,10 +62,22 @@ function App() {
     const task = tasks.find(t => t.id === taskId);
     if (!task || task.status === newStatus) return;
 
+    // Add to animating tasks set to trigger animation
+    setAnimatingTasks(prev => new Set([...prev, taskId]));
+
     // Optimistic update
     setTasks(prev => prev.map(t => 
       t.id === taskId ? { ...t, status: newStatus } : t
     ));
+
+    // Remove animation class after animation completes
+    setTimeout(() => {
+      setAnimatingTasks(prev => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+    }, 400);
 
     // API call
     try {
@@ -172,6 +185,7 @@ function App() {
                     tasks={column.tasks}
                     onTaskClick={setSelectedTask}
                     selectedTask={selectedTask}
+                    animatingTasks={animatingTasks}
                   />
                 ))}
               </div>
@@ -209,12 +223,14 @@ function Column({
   status, 
   tasks, 
   onTaskClick,
-  selectedTask 
+  selectedTask,
+  animatingTasks 
 }: { 
   status: TaskStatus; 
   tasks: Task[];
   onTaskClick: (task: Task) => void;
   selectedTask: Task | null;
+  animatingTasks: Set<string>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
@@ -266,6 +282,7 @@ function Column({
               task={task}
               onClick={() => onTaskClick(task)}
               isSelected={selectedTask?.id === task.id}
+              isAnimating={animatingTasks.has(task.id)}
             />
           ))
         )}
