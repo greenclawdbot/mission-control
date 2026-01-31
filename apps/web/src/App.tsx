@@ -195,19 +195,19 @@ function App() {
           background: 'var(--bg-secondary)',
           borderBottom: '1px solid var(--border-color)',
           display: 'flex',
-          justifyContent: 'space-between',
+          gap: '8px',
           alignItems: 'center',
           flexShrink: 0
         }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {/* Future filters will go here */}
-          </div>
           <button 
             className="btn btn-primary btn-sm"
             onClick={() => setShowNewTask(true)}
           >
             + New Task
           </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {/* Future filters will go here */}
+          </div>
         </div>
 
         {/* Split-pane content area */}
