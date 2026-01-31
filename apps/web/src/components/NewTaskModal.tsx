@@ -12,7 +12,7 @@ export function NewTaskModal({ onClose, onCreated }: NewTaskModalProps) {
     title: '',
     description: '',
     priority: 'Medium' as typeof PRIORITIES[number],
-    assignee: '',
+    assignee: 'clawdbot',
     tags: '',
     estimate: ''
   });
@@ -28,7 +28,7 @@ export function NewTaskModal({ onClose, onCreated }: NewTaskModalProps) {
         title: form.title,
         description: form.description || undefined,
         priority: form.priority,
-        assignee: form.assignee || undefined,
+        assignee: form.assignee,
         tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
         estimate: form.estimate ? parseFloat(form.estimate) : undefined
       });
@@ -138,7 +138,45 @@ export function NewTaskModal({ onClose, onCreated }: NewTaskModalProps) {
               />
             </div>
 
-            {/* Assignee & Priority Row */}
+            {/* Priority Row */}
+            <div style={{ marginBottom: '20px' }}>
+              <div>
+                <label style={{ 
+                  display: 'block', 
+                  fontSize: '13px', 
+                  color: 'var(--text-secondary)',
+                  marginBottom: '8px' 
+                }}>
+                  Priority
+                </label>
+                <select
+                  className="input select"
+                  value={form.priority}
+                  onChange={e => setForm(f => ({ ...f, priority: e.target.value as typeof PRIORITIES[number] }))}
+                >
+                  {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ 
+                  display: 'block', 
+                  fontSize: '13px', 
+                  color: 'var(--text-secondary)',
+                  marginBottom: '8px' 
+                }}>
+                  Priority
+                </label>
+                <select
+                  className="input select"
+                  value={form.priority}
+                  onChange={e => setForm(f => ({ ...f, priority: e.target.value as typeof PRIORITIES[number] }))}
+                >
+                  {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Assignee Toggle & Priority Row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
               <div>
                 <label style={{ 
@@ -147,14 +185,26 @@ export function NewTaskModal({ onClose, onCreated }: NewTaskModalProps) {
                   color: 'var(--text-secondary)',
                   marginBottom: '8px' 
                 }}>
-                  Assignee
+                  Assign To
                 </label>
-                <input
-                  className="input"
-                  value={form.assignee}
-                  onChange={e => setForm(f => ({ ...f, assignee: e.target.value }))}
-                  placeholder="human or clawdbot"
-                />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className={`btn ${form.assignee === 'clawdbot' ? 'btn-primary' : ''}`}
+                    onClick={() => setForm(f => ({ ...f, assignee: 'clawdbot' }))}
+                    style={{ flex: 1 }}
+                  >
+                    🤖 Bot
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${form.assignee === 'human' ? 'btn-primary' : ''}`}
+                    onClick={() => setForm(f => ({ ...f, assignee: 'human' }))}
+                    style={{ flex: 1 }}
+                  >
+                    👤 Human
+                  </button>
+                </div>
               </div>
               <div>
                 <label style={{ 
