@@ -157,22 +157,24 @@ export function SummaryBar({ tasks, nextCheck }: SummaryBarProps) {
 
       <div>
         <div style={{ 
-          fontSize: '24px', 
-          fontWeight: 600,
-          color: 'var(--accent-green)',
           display: 'flex',
           alignItems: 'center',
           gap: '8px'
         }}>
-          {completionPercent}%
-          <span style={{ 
-            fontSize: '14px',
-            fontWeight: 500,
-            color: 'var(--text-secondary)',
-            marginLeft: '4px'
+          <div style={{ 
+            fontSize: '24px', 
+            fontWeight: 600,
+            color: 'var(--accent-green)'
           }}>
-            (<CountdownTimer targetDate={nextCheck} />)
-          </span>
+            {completionPercent}%
+          </div>
+          <div style={{ 
+            fontSize: '24px', 
+            fontWeight: 600,
+            color: 'var(--text-secondary)'
+          }}>
+            <CountdownTimer targetDate={nextCheck} />
+          </div>
         </div>
         <div style={{ 
           fontSize: '12px', 
