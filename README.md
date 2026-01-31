@@ -6,41 +6,54 @@ A Mission Control–style project management web app for managing Clawdbot's wor
 
 ### Prerequisites
 - Node.js 18+
-- PostgreSQL 15+ (or Docker)
+- PostgreSQL 15+ (local install; no Docker required for development)
 
-### Development
+### Development (local Postgres + npm)
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+Two things must be running: **PostgreSQL** first, then the **client and server** via npm.
 
-2. Set up environment:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your DATABASE_URL
-   ```
+#### 1. PostgreSQL (start first)
 
-3. Start database (if using local PostgreSQL):
-   ```bash
-   # Or use Docker:
-   docker-compose up -d db
-   ```
+- You need **local PostgreSQL 15+** running (e.g. Homebrew, Postgres.app, or your OS package manager).
+- **Start Postgres** (examples; use whatever you use):
+  - **macOS (Homebrew):** `brew services start postgresql@15` (or your version). Logs: check `brew services list` and your Postgres data directory or `~/Library/Logs/` if applicable.
+  - **macOS (Postgres.app):** Start from the app; check its log window for errors.
+  - **Linux:** e.g. `sudo systemctl start postgresql` (or `pg_ctl start`); logs are usually under `/var/log` or the data directory.
+- Ensure it’s listening on **localhost:5432** and that your `.env` has:
+  - `DATABASE_URL=postgresql://mission_control:mission_control_secret@localhost:5432/mission_control`
+- **Create the DB/user** if needed (e.g. `createuser mission_control` and `createdb mission_control`, or your usual method) so they match `.env.example`.
 
-4. Initialize database:
-   ```bash
-   npm run db:migrate
-   npm run db:seed
-   ```
+#### 2. Client and server (npm scripts)
 
-5. Start development servers:
-   ```bash
-   npm run dev
-   ```
+In a **terminal**, from the repo root:
 
-   This starts:
-   - API server: http://localhost:3000
-   - Web dev server: http://localhost:5173
+```bash
+npm install
+cp .env.example .env
+# Edit .env with your DATABASE_URL if needed
+npm run db:migrate
+npm run db:seed
+npm run dev
+```
+
+`npm run dev` starts **both** the API server and the web client (via concurrently). All app logs and errors appear in this terminal.
+
+- API: http://localhost:3001 (or `PORT` from env)
+- Web: http://localhost:5173
+
+**Web app API URL:** The frontend talks to the API via `VITE_API_URL` (in `.env` or `apps/web/.env`). If unset, it uses the Vite proxy to `http://localhost:3001`. For **network access** (e.g. from another device), API and web already listen on `0.0.0.0`. Open `http://<LAN_IP>:5173` and set `VITE_API_URL=http://<LAN_IP>:3001` in local `.env` so the browser can reach the API by IP. Do not commit real IPs; keep them in `.env` only.
+
+#### Summary (no Docker)
+
+| What       | How to start                           | Where errors show        |
+| ---------- | -------------------------------------- | ------------------------ |
+| PostgreSQL | Your usual method (e.g. brew/services) | Your Postgres logs / UI  |
+| API + Web  | `npm run dev` (one terminal)           | That same terminal       |
+
+#### Troubleshooting / Seeing errors
+
+- **Postgres:** Use your normal way to view Postgres logs (e.g. Postgres.app log window, `tail -f` on the log file, or `brew services` / `systemctl` logs). If the API can’t connect, confirm Postgres is running and `DATABASE_URL` in `.env` is correct.
+- **App:** All API and web errors show in the terminal where you ran `npm run dev`.
 
 ### Production with Docker
 
