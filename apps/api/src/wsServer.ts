@@ -1,5 +1,5 @@
-import { WebSocket } from 'ws';
-import { Task, BotRun } from '../../../shared/src/types';
+import type { WebSocket } from 'ws';
+import type { Task, BotRun } from '../../../shared/src/types';
 
 // ============================================
 // WebSocket Server for Live Updates
@@ -65,10 +65,8 @@ export function handleWebSocketConnection(ws: WebSocket): void {
     timestamp: new Date().toISOString()
   });
   console.log(`[WS] Sending welcome: ${welcomeMsg}`);
-  if (ws.readyState === WebSocket.OPEN) {
+  if (ws.readyState === 1) { // OPEN
     ws.send(welcomeMsg);
-  } else {
-    console.log(`[WS] Socket not open, readyState: ${ws.readyState}`);
   }
 
   // Handle incoming messages
@@ -78,7 +76,9 @@ export function handleWebSocketConnection(ws: WebSocket): void {
       handleClientMessage(client, message);
     } catch (error) {
       console.error('[WS] Invalid message:', error);
-      ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
+      }
     }
   });
 
@@ -104,11 +104,12 @@ function handleClientMessage(client: WebSocketClient, message: WSMessage): void 
 
   switch (message.type) {
     case 'ping':
-      ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }));
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }));
+      }
       break;
 
     case 'subscribe':
-      // message.payload can be string or string[]
       const channels = Array.isArray(message.payload) 
         ? message.payload 
         : [message.payload].filter(Boolean);
@@ -117,10 +118,12 @@ function handleClientMessage(client: WebSocketClient, message: WSMessage): void 
           client.subscriptions.add(channel);
         }
       });
-      ws.send(JSON.stringify({ 
-        type: 'subscribed', 
-        subscriptions: Array.from(client.subscriptions) 
-      }));
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ 
+          type: 'subscribed', 
+          subscriptions: Array.from(client.subscriptions) 
+        }));
+      }
       break;
 
     case 'unsubscribe':
@@ -130,19 +133,24 @@ function handleClientMessage(client: WebSocketClient, message: WSMessage): void 
       toRemove.forEach((channel: string) => {
         client.subscriptions.delete(channel);
       });
-      ws.send(JSON.stringify({ 
-        type: 'unsubscribed', 
-        subscriptions: Array.from(client.subscriptions) 
-      }));
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ 
+          type: 'unsubscribed', 
+          subscriptions: Array.from(client.subscriptions) 
+        }));
+      }
       break;
 
     case 'getState':
-      // Client requesting full state refresh
-      ws.send(JSON.stringify({ type: 'state:refresh', subscriptions: Array.from(client.subscriptions) }));
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'state:refresh', subscriptions: Array.from(client.subscriptions) }));
+      }
       break;
 
     default:
-      ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${message.type}` }));
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${message.type}` }));
+      }
   }
 }
 
@@ -157,13 +165,12 @@ function broadcast(message: WSOutgoingMessage): void {
   clients.forEach((client) => {
     const { ws, subscriptions } = client;
 
-    // Check if client is subscribed to this event type
-    const eventCategory = message.type.split(':')[0]; // 'task', 'run', 'event'
+    const eventCategory = message.type.split(':')[0];
     if (!subscriptions.has(eventCategory) && !subscriptions.has('*')) {
       return;
     }
 
-    if (ws.readyState === WebSocket.OPEN) {
+    if (ws.readyState === 1) {
       ws.send(messageStr);
     }
   });

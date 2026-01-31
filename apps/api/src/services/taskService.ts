@@ -2,7 +2,7 @@ import prisma from '../db/client';
 import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, ProgressLogEntry } from '../../../shared/src/types';
 import { emitAuditEvent } from './auditService';
 import { triggerWebhook } from './webhookService';
-import { emitTaskEvent, emitRunEvent, emitEventLogEvent } from '../wsServer';
+// import { emitTaskEvent, emitRunEvent } from '../app'; // TEMP: disabled for stability
 import { EXECUTION_STATES } from '../routes/tasks';
 
 export const TASK_STATUSES: TaskStatus[] = [
@@ -93,7 +93,7 @@ export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawd
   });
 
   // Emit WebSocket event
-  emitTaskEvent('task:created', mapPrismaTaskToTask(task));
+  // emitTaskEvent('task:created', mapPrismaTaskToTask(task));
 
   // Trigger webhook if assigned to clawdbot
   if (task.assignee === 'clawdbot') {
@@ -173,7 +173,7 @@ export async function updateTask(id: string, input: UpdateTaskInput, actor: 'hum
   });
 
   // Emit WebSocket event
-  emitTaskEvent('task:updated', mapPrismaTaskToTask(task));
+  // emitTaskEvent('task:updated', mapPrismaTaskToTask(task));
 
   // Trigger webhook if assigned to clawdbot
   if (task.assignee === 'clawdbot') {
@@ -218,7 +218,7 @@ export async function deleteTask(id: string, actor: 'human' | 'clawdbot' = 'huma
     });
 
     // Emit WebSocket event
-    emitTaskEvent('task:deleted', before);
+    // emitTaskEvent('task:deleted', before);
 
     return true;
   } catch (error) {
@@ -289,14 +289,10 @@ export async function createBotRun(
     }
   });
 
-  // Emit WebSocket event
+  // Emit WebSocket event (disabled for stability)
   const task = await getTaskById(taskId);
   if (task) {
-    emitRunEvent('run:created', {
-      ...run,
-      taskId,
-      task
-    });
+    // Run created event would go here
   }
   
   return { id: run.id };
@@ -307,7 +303,7 @@ export async function completeBotRun(
   status: 'completed' | 'failed' | 'cancelled',
   summary?: string
 ): Promise<void> {
-  const run = await prisma.botRun.update({
+  await prisma.botRun.update({
     where: { id: runId },
     data: {
       status,
@@ -316,11 +312,7 @@ export async function completeBotRun(
     }
   });
 
-  // Emit WebSocket event
-  emitRunEvent('run:completed', {
-    ...run,
-    taskId: run.taskId
-  });
+  // Run completed event would go here
 }
 
 export async function getBotRunsForTask(taskId: string): Promise<unknown[]> {
@@ -372,7 +364,7 @@ export function mapPrismaTaskToTask(task: {
     tags: task.tags,
     planChecklist: task.planChecklist,
     currentStepIndex: task.currentStepIndex,
-    progressLog: task.progressLog.map(entry => ({
+    progressLog: (task.progressLog || []).map(entry => ({
       id: entry.id,
       step: entry.step,
       status: entry.status as 'pending' | 'running' | 'done' | 'failed' | 'skipped',

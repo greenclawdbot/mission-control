@@ -3,7 +3,7 @@ import { createWriteStream } from 'fs';
 import { mkdir } from 'fs/promises';
 import { join } from 'path';
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = parseInt(process.env.API_PORT || process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const LOG_DIR = join(process.cwd(), '.logs');
 
@@ -44,7 +44,7 @@ async function main() {
     console.log(`📋 API docs at http://${HOST}:${PORT}/api/v1`);
     console.log(`📝 Logs at ${LOG_DIR}`);
   } catch (err) {
-    app.log.error(err);
+    console.error('Failed to start server:', err);
     process.exit(1);
   }
 }

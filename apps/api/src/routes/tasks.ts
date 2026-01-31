@@ -450,6 +450,11 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
           sessionLockedAt: new Date(),
           status: 'InProgress',
           executionState: 'running'
+        },
+        include: {
+          progressLog: {
+            orderBy: { completedAt: 'desc' }
+          }
         }
       });
 
