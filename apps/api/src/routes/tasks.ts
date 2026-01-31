@@ -287,6 +287,7 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
     try {
       // Delete in correct order due to foreign key constraints
       await prisma.taskProgressLogEntry.deleteMany({});
+      await prisma.taskStateLog.deleteMany({});
       await prisma.auditLogEntry.deleteMany({});
       await prisma.botRun.deleteMany({});
       const result = await prisma.task.deleteMany({});
@@ -295,6 +296,18 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
       console.error('Failed to clear demo data:', error);
       return reply.status(500).send({ error: 'Failed to clear demo data' });
     }
+  });
+
+  // ============================================
+  // State Logs Endpoints
+  // ============================================
+
+  // GET /api/tasks/:id/state-logs - Get state change history for a task
+  fastify.get<{
+    Params: z.infer<typeof taskParamsSchema>;
+  }>('/tasks/:id/state-logs', async (request: FastifyRequest<{ Params: z.infer<typeof taskParamsSchema> }>, reply: FastifyReply) => {
+    const logs = await taskService.getStateLogsForTask(request.params.id);
+    return { logs };
   });
 
   // ============================================

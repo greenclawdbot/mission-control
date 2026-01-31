@@ -1,4 +1,4 @@
-import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState } from '../shared-types';
+import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, TaskStateLog } from '../shared-types';
 
 const base = (import.meta.env?.VITE_API_URL ?? '').toString().trim().replace(/\/$/, '');
 const API_BASE = base ? `${base}/api/v1` : '/api/v1';
@@ -83,6 +83,10 @@ export const api = {
 
   async getTaskEvents(id: string): Promise<{ events: unknown[] }> {
     return fetchJson(`${API_BASE}/tasks/${id}/events`);
+  },
+
+  async getTaskStateLogs(id: string): Promise<{ logs: TaskStateLog[] }> {
+    return fetchJson(`${API_BASE}/tasks/${id}/state-logs`);
   },
 
   async getBoardSummary(): Promise<{ summary: { tasksThisWeek: number; inProgress: number; total: number; completionPercent: number; runningBots: number; idleTasks: number; blockedTasks: number } }> {

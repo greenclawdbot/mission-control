@@ -15,6 +15,76 @@ export const TASK_STATUSES: TaskStatus[] = [
 ];
 
 // ============================================
+// STATE LOG HELPERS
+// ============================================
+
+export interface TaskStateLog {
+  id: string;
+  taskId: string;
+  status: string;
+  enteredAt: Date;
+  exitedAt: Date | null;
+  duration: number | null;
+}
+
+async function createStateLogEntry(taskId: string, status: string): Promise<TaskStateLog> {
+  const log = await prisma.taskStateLog.create({
+    data: {
+      taskId,
+      status,
+      enteredAt: new Date()
+    }
+  });
+  return {
+    id: log.id,
+    taskId: log.taskId,
+    status: log.status,
+    enteredAt: log.enteredAt,
+    exitedAt: log.exitedAt,
+    duration: log.duration
+  };
+}
+
+async function closeStateLogEntry(taskId: string, status: string): Promise<void> {
+  // Find the most recent open log entry for this task and status
+  const openLog = await prisma.taskStateLog.findFirst({
+    where: {
+      taskId,
+      status,
+      exitedAt: null
+    },
+    orderBy: { enteredAt: 'desc' }
+  });
+
+  if (openLog) {
+    const exitedAt = new Date();
+    const duration = Math.round((exitedAt.getTime() - openLog.enteredAt.getTime()) / 1000);
+    await prisma.taskStateLog.update({
+      where: { id: openLog.id },
+      data: {
+        exitedAt,
+        duration
+      }
+    });
+  }
+}
+
+export async function getStateLogsForTask(taskId: string): Promise<TaskStateLog[]> {
+  const logs = await prisma.taskStateLog.findMany({
+    where: { taskId },
+    orderBy: { enteredAt: 'desc' }
+  });
+  return logs.map(log => ({
+    id: log.id,
+    taskId: log.taskId,
+    status: log.status,
+    enteredAt: log.enteredAt,
+    exitedAt: log.exitedAt,
+    duration: log.duration
+  }));
+}
+
+// ============================================
 // CRUD Operations
 // ============================================
 
@@ -60,6 +130,7 @@ export async function getTaskById(id: string): Promise<Task | null> {
 }
 
 export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawdbot' = 'human'): Promise<Task> {
+  const status = input.status || 'Backlog';
   const task = await prisma.task.create({
     data: {
       title: input.title,
@@ -74,7 +145,9 @@ export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawd
       timeSpent: 0,
       needsApproval: input.needsApproval || false,
       blockedBy: input.blockedBy || [],
-      executionState: 'queued'
+      executionState: 'queued',
+      status,
+      currentStateStartedAt: new Date()
     },
     include: {
       progressLog: {
@@ -82,6 +155,9 @@ export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawd
       }
     }
   });
+
+  // Create initial state log entry
+  await createStateLogEntry(task.id, status);
 
   // Emit audit event
   await emitAuditEvent({
@@ -116,7 +192,13 @@ export async function updateTask(id: string, input: UpdateTaskInput, actor: 'hum
   if (input.title !== undefined) updateData.title = input.title;
   if (input.description !== undefined) updateData.description = input.description;
   if (input.status !== undefined) {
+    // Close the previous state log entry
+    await closeStateLogEntry(id, before.status);
+    // Create a new state log entry for the new status
+    await createStateLogEntry(id, input.status);
+
     updateData.status = input.status;
+    updateData.currentStateStartedAt = new Date();
     // Set startedAt when moving to InProgress
     if (input.status === 'InProgress' && before.status !== 'InProgress') {
       updateData.startedAt = new Date();
@@ -203,17 +285,18 @@ export async function deleteTask(id: string, actor: 'human' | 'clawdbot' = 'huma
   try {
     // Delete related records first (due to foreign key constraints)
     await prisma.taskProgressLogEntry.deleteMany({ where: { taskId: id } });
+    await prisma.taskStateLog.deleteMany({ where: { taskId: id } });
     await prisma.auditEvent.deleteMany({ where: { taskId: id } });
     await prisma.botRun.deleteMany({ where: { taskId: id } });
-    
+
     // Delete TaskDependency records where this task is involved
-    await prisma.taskDependency.deleteMany({ 
-      where: { 
+    await prisma.taskDependency.deleteMany({
+      where: {
         OR: [
           { dependentTaskId: id },
           { dependencyTaskId: id }
         ]
-      } 
+      }
     });
 
     await prisma.task.delete({ where: { id } });

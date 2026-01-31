@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { Task } from '../shared-types';
 
@@ -8,6 +8,55 @@ interface TaskCardProps {
   isSelected?: boolean;
   isAnimating?: boolean;
   isSystemUpdated?: boolean;
+}
+
+// Utility function to format elapsed time
+function formatElapsedTime(startTime?: string): string {
+  if (!startTime) return '-';
+
+  const start = new Date(startTime).getTime();
+  const now = Date.now();
+  const elapsed = now - start;
+
+  if (elapsed < 0) return '-';
+
+  const seconds = Math.floor(elapsed / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (days > 0) return `${days}d ${hours % 24}h`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+  return `${seconds}s`;
+}
+
+// Component for the timer badge
+function StateTimerBadge({ task }: { task: Task }) {
+  const [elapsed, setElapsed] = useState<string>('');
+
+  useEffect(() => {
+    // Initial calculation
+    setElapsed(formatElapsedTime(task.currentStateStartedAt));
+
+    // Update every second
+    const interval = setInterval(() => {
+      setElapsed(formatElapsedTime(task.currentStateStartedAt));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [task.currentStateStartedAt]);
+
+  // Only show for non-terminal states
+  const isTerminalState = ['Done', 'Backlog'].includes(task.status);
+
+  if (isTerminalState || !task.currentStateStartedAt) return null;
+
+  return (
+    <span className="state-timer-badge" title={`Started: ${new Date(task.currentStateStartedAt).toLocaleString()}`}>
+      ⏱️ {task.status}: {elapsed}
+    </span>
+  );
 }
 
 export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdated }: TaskCardProps) {
@@ -129,6 +178,9 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
           </span>
         )}
       </div>
+
+      {/* State Timer Badge */}
+      <StateTimerBadge task={task} />
 
       {/* Idle warning with tooltip */}
       {isIdleTooLong && (

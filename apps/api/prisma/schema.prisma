@@ -19,14 +19,14 @@ model Task {
   id          String   @id @default(uuid())
   title       String
   description String?  @db.Text
-  
+
   // Execution State
   status      String   @default("Backlog")
   executionState String @default("queued") // queued | running | waiting | idle | failed | completed
   assignee    String?
   priority    String   @default("Medium")
-  tags        String[] 
-  
+  tags        String[]
+
   // Bot Observability
   planChecklist String[]
   currentStepIndex Int   @default(0)
@@ -34,35 +34,39 @@ model Task {
   blockedBy      String[] // Array of task IDs that this task depends on
   lastActionAt   DateTime?
   lastHeartbeatAt DateTime?
-  
+
   // Time Tracking
   estimate     Float?
   timeSpent    Float    @default(0)
-  
+
+  // State Timer
+  currentStateStartedAt DateTime? // When the task entered its current status
+
   // Approval Gates
   needsApproval Boolean @default(false)
   approvedAt    DateTime?
   approvedBy    String?
-  
+
   // Session Binding (for bot autonomy + crash recovery)
   sessionKey      String?   // Clawdbot session holding this task
   sessionLockedAt DateTime? // When lock was acquired (for stale detection)
-  
+
   // Work Output (for auditability + review)
   results      String?  @db.Text  // Markdown summary of work done
   commits      Json?    // Array of {sha, message, url, timestamp}
-  
+
   // Dates
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   startedAt    DateTime?
   completedAt  DateTime?
   dueDate      DateTime?
-  
+
   // Audit
   auditEvents  AuditEvent[]
   progressLog  TaskProgressLogEntry[]
   botRuns      BotRun[]
+  stateLogs    TaskStateLog[]
   dependencies TaskDependency[] @relation("DependentTask")
   dependents   TaskDependency[] @relation("DependencyTask")
   
@@ -158,4 +162,22 @@ model TaskDependency {
   @@unique([dependentTaskId, dependencyTaskId])
   @@index([dependentTaskId])
   @@index([dependencyTaskId])
+}
+
+// ============================================
+// TASK STATE LOGS (for time tracking)
+// ============================================
+
+model TaskStateLog {
+  id          String   @id @default(uuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id])
+  status      String   // The status (Backlog, Ready, InProgress, etc.)
+  enteredAt   DateTime @default(now())
+  exitedAt    DateTime?
+  duration    Int?     // Duration in seconds
+  
+  @@index([taskId])
+  @@index([status])
+  @@index([enteredAt])
 }

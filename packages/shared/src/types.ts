@@ -36,18 +36,18 @@ export interface Task {
   assignee?: string;
   priority: Priority;
   tags: string[];
-  
+
   // Bot Observability
   planChecklist: string[];
   currentStepIndex: number;
   progressLog: ProgressLogEntry[];
   blockedReason?: string;
   lastActionAt?: string;
-  
+
   // Session Binding (for bot autonomy + crash recovery)
   sessionKey?: string | null;
   sessionLockedAt?: string | null;
-  
+
   // GitHub Repository Integration
   github_repo?: {
     name: string;
@@ -78,15 +78,18 @@ export interface Task {
     removed: string[];
     committed_at: string;
   };
-  
+
   // AI Planning
   systemPrompt?: string;        // System prompt override for this task
   planningModel?: string;       // Which AI model to use for planning
-  
+
   // Time Tracking
   estimate?: number;
   timeSpent: number;
-  
+
+  // State Timer
+  currentStateStartedAt?: string;
+
   // Work Output (for auditability + review)
   results?: string;  // Markdown summary of work done
   commits?: Array<{
@@ -95,7 +98,7 @@ export interface Task {
     url: string;
     timestamp: string;
   }>;
-  
+
   // Dates
   createdAt: string;
   updatedAt: string;
@@ -111,6 +114,18 @@ export interface ProgressLogEntry {
   id: string;
   step: string;
   completedAt: string;
+}
+
+// ============================================
+// Task State Log Entry
+// ============================================
+export interface TaskStateLog {
+  id: string;
+  taskId: string;
+  status: TaskStatus;
+  enteredAt: string;
+  exitedAt?: string;
+  duration?: number; // Duration in seconds
 }
 
 // ============================================
