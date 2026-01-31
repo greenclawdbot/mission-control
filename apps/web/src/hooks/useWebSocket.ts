@@ -38,7 +38,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     // Only connect in browser
     if (typeof window === 'undefined') return;
 
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/ws`;
+    const base = (import.meta.env?.VITE_API_URL ?? '').toString().trim().replace(/\/$/, '');
+    const wsUrl = base
+      ? `${base.replace(/^http/, 'ws')}/api/v1/ws`
+      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/ws`;
     const socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {

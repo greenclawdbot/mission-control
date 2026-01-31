@@ -22,6 +22,8 @@ process.on('unhandledRejection', (reason) => {
   logError(String(reason), 'UNHANDLED REJECTION')
 })
 
+const apiProxyTarget = process.env.VITE_PROXY_TARGET || process.env.VITE_API_URL || 'http://localhost:3001'
+
 export default defineConfig({
   plugins: [react()],
   logLevel: 'info',
@@ -34,7 +36,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://192.168.1.84:3001',
+        target: apiProxyTarget,
         changeOrigin: true,
         secure: false,
         configure: (proxy, _options) => {
@@ -57,7 +59,7 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: 'http://192.168.1.84:3001',
+        target: apiProxyTarget,
         changeOrigin: true,
         secure: false,
         configure: (proxy, _options) => {

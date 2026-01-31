@@ -46,7 +46,8 @@ export function useSSE(onTaskEvent?: (event: { type: string; data: Task }) => vo
       }
     }
 
-    const sseUrl = (import.meta.env?.VITE_API_URL || '') + '/api/v1/events' || '/api/v1/events';
+    const base = (import.meta.env?.VITE_API_URL ?? '').toString().trim().replace(/\/$/, '');
+    const sseUrl = base ? `${base}/api/v1/events` : `${window.location.origin}/api/v1/events`;
     const es = new EventSource(sseUrl);
     eventSourceRef.current = es;
 

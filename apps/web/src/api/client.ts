@@ -1,6 +1,7 @@
 import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState } from '../shared-types';
 
-const API_BASE = (import.meta.env?.VITE_API_URL || '') + '/api/v1' || '/api/v1';
+const base = (import.meta.env?.VITE_API_URL ?? '').toString().trim().replace(/\/$/, '');
+const API_BASE = base ? `${base}/api/v1` : '/api/v1';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
