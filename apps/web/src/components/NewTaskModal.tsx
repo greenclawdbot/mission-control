@@ -138,44 +138,6 @@ export function NewTaskModal({ onClose, onCreated }: NewTaskModalProps) {
               />
             </div>
 
-            {/* Priority Row */}
-            <div style={{ marginBottom: '20px' }}>
-              <div>
-                <label style={{ 
-                  display: 'block', 
-                  fontSize: '13px', 
-                  color: 'var(--text-secondary)',
-                  marginBottom: '8px' 
-                }}>
-                  Priority
-                </label>
-                <select
-                  className="input select"
-                  value={form.priority}
-                  onChange={e => setForm(f => ({ ...f, priority: e.target.value as typeof PRIORITIES[number] }))}
-                >
-                  {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ 
-                  display: 'block', 
-                  fontSize: '13px', 
-                  color: 'var(--text-secondary)',
-                  marginBottom: '8px' 
-                }}>
-                  Priority
-                </label>
-                <select
-                  className="input select"
-                  value={form.priority}
-                  onChange={e => setForm(f => ({ ...f, priority: e.target.value as typeof PRIORITIES[number] }))}
-                >
-                  {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-            </div>
-
             {/* Assignee Toggle & Priority Row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
               <div>
