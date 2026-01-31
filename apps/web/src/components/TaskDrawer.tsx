@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Task, TaskStatus, TASK_STATUSES, PRIORITIES, ExecutionState } from '../shared-types';
+import { Task, TaskStatus, TASK_STATUSES, PRIORITIES, ExecutionState, TaskStateLog } from '../shared-types';
 import { api } from '../api/client';
 import { marked } from 'marked';
 
@@ -32,7 +32,7 @@ interface ContextMessage {
 
 export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: TaskDrawerProps) {
   const [task, setTask] = useState(initialTask);
-  const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'results' | 'runs' | 'activity'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'results' | 'runs' | 'activity' | 'state'>('details');
   
   // Sync local state when initialTask changes (e.g., clicking different card)
   useEffect(() => {
@@ -42,6 +42,7 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [auditEvents, setAuditEvents] = useState<unknown[]>([]);
   const [botRuns, setBotRuns] = useState<BotRun[]>([]);
+  const [stateLogs, setStateLogs] = useState<TaskStateLog[]>([]);
   const [editForm, setEditForm] = useState({
     title: task.title,
     description: task.description || '',
@@ -68,14 +69,16 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [taskRes, eventsRes, runsRes] = await Promise.all([
+        const [taskRes, eventsRes, runsRes, stateLogsRes] = await Promise.all([
           api.getTask(task.id),
           api.getTaskEvents(task.id),
-          fetch(`/api/v1/tasks/${task.id}/runs`).then(r => r.json()).catch(() => ({ runs: [] }))
+          fetch(`/api/v1/tasks/${task.id}/runs`).then(r => r.json()).catch(() => ({ runs: [] })),
+          api.getTaskStateLogs(task.id)
         ]);
         setTask(taskRes.task);
         setAuditEvents(eventsRes.events || []);
         setBotRuns(((runsRes as { runs?: BotRun[] }).runs) || []);
+        setStateLogs(stateLogsRes.logs || []);
         
         // Build context messages from task description and previous runs
         const messages: ContextMessage[] = [];
@@ -302,6 +305,19 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
     return `${days}d ago`;
   };
 
+  const formatDuration = (seconds: number | undefined | null): string => {
+    if (seconds == null || seconds < 0) return '—';
+    const m = Math.floor(seconds / 60);
+    const h = Math.floor(m / 60);
+    const d = Math.floor(h / 24);
+    const s = Math.floor(seconds % 60);
+    const min = m % 60;
+    if (d > 0) return `${d}d ${h % 24}h`;
+    if (h > 0) return `${h}h ${min}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
   const renderMarkdown = (text?: string) => {
     if (!text) return null;
     return <div className="markdown-content" dangerouslySetInnerHTML={{ __html: marked(text) }} />;
@@ -440,7 +456,7 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
         borderBottom: '1px solid var(--border-color)',
         padding: '0 20px'
       }}>
-        {(['details', 'plan', 'results', 'runs', 'activity'] as const).map(tab => (
+        {(['details', 'plan', 'results', 'runs', 'activity', 'state'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -1108,6 +1124,67 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'state' && (
+          <div>
+            <h4 style={{ margin: '0 0 16px 0', fontSize: '14px' }}>TIME IN STATE</h4>
+            {stateLogs.length === 0 ? (
+              <div className="empty-state">
+                <p>No state history recorded</p>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 12px 8px 0', color: 'var(--text-secondary)', fontWeight: 600 }}>Status</th>
+                      <th style={{ padding: '8px 12px', color: 'var(--text-secondary)', fontWeight: 600 }}>Entered</th>
+                      <th style={{ padding: '8px 12px', color: 'var(--text-secondary)', fontWeight: 600 }}>Exited</th>
+                      <th style={{ padding: '8px 0 8px 12px', color: 'var(--text-secondary)', fontWeight: 600 }}>Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stateLogs.map((log) => {
+                      const isOpen = log.exitedAt == null;
+                      const liveSeconds = isOpen && log.enteredAt
+                        ? Math.round((Date.now() - new Date(log.enteredAt).getTime()) / 1000)
+                        : null;
+                      return (
+                        <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: '8px 12px 8px 0', fontWeight: 500 }}>{log.status}</td>
+                          <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>{formatDate(log.enteredAt)}</td>
+                          <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>
+                            {log.exitedAt ? formatDate(log.exitedAt) : 'In progress'}
+                          </td>
+                          <td style={{ padding: '8px 0 8px 12px', fontFamily: 'monospace' }}>
+                            {isOpen && liveSeconds != null ? formatDuration(liveSeconds) : formatDuration(log.duration ?? undefined)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--border-color)', fontWeight: 600 }}>
+                      <td style={{ padding: '12px 12px 12px 0' }}>Total</td>
+                      <td style={{ padding: '12px 12px', color: 'var(--text-secondary)' }}>—</td>
+                      <td style={{ padding: '12px 12px', color: 'var(--text-secondary)' }}>—</td>
+                      <td style={{ padding: '12px 0 12px 12px', fontFamily: 'monospace' }}>
+                        {formatDuration(
+                          stateLogs.reduce((acc, log) => {
+                            if (log.exitedAt != null && log.duration != null) return acc + log.duration;
+                            if (log.exitedAt == null && log.enteredAt)
+                              return acc + Math.round((Date.now() - new Date(log.enteredAt).getTime()) / 1000);
+                            return acc;
+                          }, 0)
+                        )}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             )}
           </div>

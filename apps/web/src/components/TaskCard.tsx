@@ -10,13 +10,13 @@ interface TaskCardProps {
   isSystemUpdated?: boolean;
 }
 
-// Utility function to format elapsed time
-function formatElapsedTime(startTime?: string): string {
+// Utility function to format elapsed time (start to now, or start to end)
+function formatElapsedTime(startTime?: string, endTime?: string): string {
   if (!startTime) return '-';
 
   const start = new Date(startTime).getTime();
-  const now = Date.now();
-  const elapsed = now - start;
+  const end = endTime ? new Date(endTime).getTime() : Date.now();
+  const elapsed = end - start;
 
   if (elapsed < 0) return '-';
 
@@ -35,25 +35,33 @@ function formatElapsedTime(startTime?: string): string {
 function StateTimerBadge({ task }: { task: Task }) {
   const [elapsed, setElapsed] = useState<string>('');
 
+  // Done: show total elapsed (created → completed), static, no ticker
+  if (task.status === 'Done') {
+    const endTime = task.completedAt ?? task.updatedAt;
+    if (!task.createdAt || !endTime) return null;
+    const total = formatElapsedTime(task.createdAt, endTime);
+    return (
+      <span className="state-timer-badge" title={`Created: ${new Date(task.createdAt).toLocaleString()} → Completed: ${new Date(endTime).toLocaleString()}`}>
+        ⏱️ Total: {total}
+      </span>
+    );
+  }
+
+  // Use currentStateStartedAt when set; fallback to updatedAt/createdAt for legacy tasks
+  const startTime = task.currentStateStartedAt ?? task.updatedAt ?? task.createdAt;
+
   useEffect(() => {
-    // Initial calculation
-    setElapsed(formatElapsedTime(task.currentStateStartedAt));
-
-    // Update every second
+    setElapsed(formatElapsedTime(startTime));
     const interval = setInterval(() => {
-      setElapsed(formatElapsedTime(task.currentStateStartedAt));
+      setElapsed(formatElapsedTime(startTime));
     }, 1000);
-
     return () => clearInterval(interval);
-  }, [task.currentStateStartedAt]);
+  }, [startTime]);
 
-  // Only show for non-terminal states
-  const isTerminalState = ['Done', 'Backlog'].includes(task.status);
-
-  if (isTerminalState || !task.currentStateStartedAt) return null;
+  if (!startTime) return null;
 
   return (
-    <span className="state-timer-badge" title={`Started: ${new Date(task.currentStateStartedAt).toLocaleString()}`}>
+    <span className="state-timer-badge" title={`Started: ${new Date(startTime).toLocaleString()}`}>
       ⏱️ {task.status}: {elapsed}
     </span>
   );

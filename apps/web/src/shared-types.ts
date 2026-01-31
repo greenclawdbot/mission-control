@@ -70,7 +70,8 @@ export interface Task {
   // Time Tracking
   estimate?: number;
   timeSpent: number;
-  
+  currentStateStartedAt?: string;
+
   // Approval Gates
   needsApproval: boolean;
   approvedAt?: string;
@@ -91,6 +92,18 @@ export interface Task {
   startedAt?: string;
   completedAt?: string;
   dueDate?: string;
+}
+
+// ============================================
+// Task State Log Entry
+// ============================================
+export interface TaskStateLog {
+  id: string;
+  taskId: string;
+  status: TaskStatus;
+  enteredAt: string;
+  exitedAt?: string;
+  duration?: number; // Duration in seconds
 }
 
 // ============================================
