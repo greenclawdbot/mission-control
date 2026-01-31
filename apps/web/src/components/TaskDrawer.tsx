@@ -21,6 +21,15 @@ interface BotRun {
   parentRunId?: string;
 }
 
+interface ContextMessage {
+  id: string;
+  content: string;
+  timestamp: string;
+  status?: TaskStatus;
+  attemptNumber?: number;
+  runResult?: string;
+}
+
 export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: TaskDrawerProps) {
   const [task, setTask] = useState(initialTask);
   const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'results' | 'runs' | 'activity'>('details');
@@ -40,6 +49,7 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
   
   // Additional context state for Review items
   const [additionalContext, setAdditionalContext] = useState('');
+  const [contextMessages, setContextMessages] = useState<ContextMessage[]>([]);
 
   // ESC close only
   useEffect(() => {
@@ -61,6 +71,39 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
         setTask(taskRes.task);
         setAuditEvents(eventsRes.events || []);
         setBotRuns(((runsRes as { runs?: BotRun[] }).runs) || []);
+        
+        // Build context messages from task description and previous runs
+        const messages: ContextMessage[] = [];
+        
+        // Parse existing context from description
+        if (taskRes.task.description) {
+          const contextRegex = /---\s*\*\*Additional Context \((.+?)\):\*\*\s*([\s\S]*?)(?=---|$)/g;
+          let match;
+          while ((match = contextRegex.exec(taskRes.task.description)) !== null) {
+            messages.push({
+              id: `context-${match.index}`,
+              content: match[2].trim(),
+              timestamp: match[1]
+            });
+          }
+        }
+        
+        // Add previous run results to messages
+        const runs = ((runsRes as { runs?: BotRun[] }).runs) || [];
+        runs.forEach(run => {
+          if (run.status === 'completed' || run.status === 'failed') {
+            messages.push({
+              id: `run-${run.id}`,
+              content: `Run #${run.attemptNumber}: ${run.summary || 'No summary'}`,
+              timestamp: run.startedAt,
+              status: run.status === 'completed' ? 'Completed' : 'Failed',
+              attemptNumber: run.attemptNumber,
+              runResult: run.summary
+            });
+          }
+        });
+        
+        setContextMessages(messages.reverse());
       } catch (error) {
         console.error('Failed to fetch task data:', error);
       }
@@ -164,6 +207,35 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
       console.error('Failed to update status:', error);
       const taskRes = await api.getTask(task.id);
       setTask(taskRes.task);
+    }
+  };
+
+  const handleSubmitContext = async () => {
+    if (!additionalContext.trim()) return;
+    
+    const timestamp = new Date().toISOString();
+    const newMessage: ContextMessage = {
+      id: `context-${Date.now()}`,
+      content: additionalContext.trim(),
+      timestamp
+    };
+    
+    // Add to local messages
+    setContextMessages(prev => [newMessage, ...prev]);
+    
+    // Also update the task description
+    const contextHeader = `\n\n---\n**Additional Context (${timestamp}):**\n${additionalContext.trim()}\n`;
+    const descriptionUpdate = (task.description || '') + contextHeader;
+    
+    try {
+      const response = await api.updateTask(task.id, { description: descriptionUpdate });
+      setTask(response.task);
+      onUpdate(response.task);
+      setAdditionalContext('');
+    } catch (error) {
+      console.error('Failed to save context:', error);
+      // Remove from local messages on failure
+      setContextMessages(prev => prev.filter(m => m.id !== newMessage.id));
     }
   };
 
@@ -335,27 +407,6 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
           <span style={{ fontSize: '11px', color: 'var(--accent-green)' }}>
             ✅ Completed
           </span>
-        )}
-
-        {/* Review-specific actions: Move back to Backlog or Ready */}
-        {task.status === 'Review' && (
-          <>
-            <div style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
-            <button 
-              className="btn btn-sm"
-              onClick={() => handleStatusChange('Backlog')}
-              title="Move back to Backlog for revision"
-            >
-              📥 Backlog
-            </button>
-            <button 
-              className="btn btn-sm"
-              onClick={() => handleStatusChange('Ready')}
-              title="Move back to Ready for bot to reprocess"
-            >
-              📋 Ready
-            </button>
-          </>
         )}
       </div>
 
@@ -532,25 +583,171 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
             {task.status === 'Review' && (
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--accent-orange)', marginBottom: '8px' }}>
-                  ADDITIONAL CONTEXT ⚠️
+                  CONTEXT FEED ⚠️
                 </label>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: 0, marginBottom: '8px' }}>
-                  Enter new context/messages below. These will be prepended to the description when moving back to Backlog or Ready.
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: 0, marginBottom: '16px' }}>
+                  Previous context messages and run results are shown below. Enter new context below to add to the feed.
                 </p>
-                <textarea
-                  className="input textarea"
-                  value={additionalContext}
-                  onChange={e => setAdditionalContext(e.target.value)}
-                  placeholder="Enter additional context, feedback, or instructions for reprocessing..."
-                  rows={4}
-                  style={{
-                    width: '100%',
-                    borderColor: 'var(--accent-orange)',
-                    background: 'rgba(210, 153, 34, 0.05)'
-                  }}
-                />
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', textAlign: 'right' }}>
-                  {additionalContext.length} characters
+                
+                {/* Chat Feed - Previous Contexts and Results */}
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  marginBottom: '16px',
+                  padding: '12px',
+                  background: 'var(--bg-secondary)',
+                  borderRadius: '8px'
+                }}>
+                  {contextMessages.length === 0 ? (
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '24px',
+                      color: 'var(--text-secondary)',
+                      fontSize: '13px'
+                    }}>
+                      No previous context or run results. Add context below to start the conversation.
+                    </div>
+                  ) : (
+                    contextMessages.map((message) => (
+                      <div key={message.id} style={{
+                        background: message.runResult ? 'rgba(88, 166, 255, 0.1)' : 'var(--bg-tertiary)',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        borderLeft: message.runResult 
+                          ? '3px solid var(--accent-blue)'
+                          : '3px solid var(--accent-orange)'
+                      }}>
+                        {message.runResult ? (
+                          <>
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              marginBottom: '8px'
+                            }}>
+                              <span style={{
+                                background: 'var(--accent-blue)',
+                                color: 'white',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: 600
+                              }}>
+                                🤖 RUN #{message.attemptNumber}
+                              </span>
+                              <span style={{
+                                background: message.status === 'Completed' 
+                                  ? 'var(--accent-green)' 
+                                  : 'var(--accent-red)',
+                                color: 'white',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: 600
+                              }}>
+                                {message.status?.toUpperCase()}
+                              </span>
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                {formatDate(message.timestamp)}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '13px' }}>
+                              {message.runResult}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              marginBottom: '8px'
+                            }}>
+                              <span style={{
+                                background: 'var(--accent-orange)',
+                                color: 'white',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: 600
+                              }}>
+                                👤 CONTEXT
+                              </span>
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                {formatDate(message.timestamp)}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '13px' }}>
+                              {message.content}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* New Context Input */}
+                <div style={{ marginBottom: '12px' }}>
+                  <textarea
+                    className="input textarea"
+                    value={additionalContext}
+                    onChange={e => setAdditionalContext(e.target.value)}
+                    placeholder="Enter new context, feedback, or instructions..."
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      borderColor: 'var(--accent-orange)',
+                      background: 'rgba(210, 153, 34, 0.05)'
+                    }}
+                  />
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    marginTop: '8px'
+                  }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      {additionalContext.length} characters
+                    </span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {/* Backlog/Ready buttons moved here - below the input */}
+                      <button 
+                        className="btn btn-sm"
+                        onClick={() => handleStatusChange('Backlog')}
+                        title="Move back to Backlog for revision"
+                        style={{
+                          background: 'var(--bg-tertiary)',
+                          borderColor: 'var(--border-color)'
+                        }}
+                      >
+                        📥 Backlog
+                      </button>
+                      <button 
+                        className="btn btn-sm"
+                        onClick={() => handleStatusChange('Ready')}
+                        title="Move back to Ready for bot to reprocess"
+                        style={{
+                          background: 'var(--accent-green)',
+                          color: 'white',
+                          borderColor: 'var(--accent-green)'
+                        }}
+                      >
+                        📋 Ready
+                      </button>
+                      <button 
+                        className="btn btn-primary btn-sm"
+                        onClick={handleSubmitContext}
+                        disabled={!additionalContext.trim()}
+                        title="Submit context to add to feed (without changing status)"
+                      >
+                        ➕ Add Context
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
