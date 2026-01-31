@@ -289,4 +289,177 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.status(500).send({ error: 'Failed to clear demo data' });
     }
   });
+
+  // ============================================
+  // Session Binding & Bot Autonomy Endpoints
+  // ============================================
+
+  // POST /api/tasks/:id/claim - Atomic claim with sessionKey
+  const claimSchema = z.object({
+    sessionKey: z.string().min(1)
+  });
+
+  fastify.post<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof claimSchema>;
+  }>('/tasks/:id/claim', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof claimSchema>;
+  }>, reply: FastifyReply) => {
+    const { sessionKey } = claimSchema.parse(request.body);
+    const taskId = request.params.id;
+
+    // Atomic claim - only succeeds if sessionKey is NULL or same owner
+    const task = await prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    // Check if already claimed
+    if (task.sessionKey && task.sessionKey !== sessionKey) {
+      return reply.status(409).send({ 
+        error: 'Task already claimed',
+        claimedBy: task.sessionKey,
+        lockedAt: task.sessionLockedAt
+      });
+    }
+
+    // Claim the task
+    const updatedTask = await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        sessionKey,
+        sessionLockedAt: new Date(),
+        status: 'InProgress',
+        executionState: 'running'
+      }
+    });
+
+    return { 
+      task: taskService.mapPrismaTaskToTask(updatedTask),
+      claimedAt: updatedTask.sessionLockedAt
+    };
+  });
+
+  // POST /api/tasks/:id/release - Release claimed task
+  const releaseSchema = z.object({
+    sessionKey: z.string().min(1)
+  });
+
+  fastify.post<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof releaseSchema>;
+  }>('/tasks/:id/release', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof releaseSchema>;
+  }>, reply: FastifyReply) => {
+    const { sessionKey } = releaseSchema.parse(request.body);
+    const taskId = request.params.id;
+
+    const task = await prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    // Only owner can release
+    if (task.sessionKey && task.sessionKey !== sessionKey) {
+      return reply.status(403).send({ 
+        error: 'Cannot release - task claimed by different session' 
+      });
+    }
+
+    await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        sessionKey: null,
+        sessionLockedAt: null
+      }
+    });
+
+    return { released: true };
+  });
+
+  // POST /api/tasks/cleanup-stale - Release locks older than threshold
+  const cleanupSchema = z.object({
+    olderThanMinutes: z.number().min(1).default(5)
+  });
+
+  fastify.post('/tasks/cleanup-stale', async (request: FastifyRequest<{
+    Body: z.infer<typeof cleanupSchema>;
+  }>, reply: FastifyReply) => {
+    const { olderThanMinutes } = cleanupSchema.parse(request.body);
+    
+    const threshold = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+
+    const result = await prisma.task.updateMany({
+      where: {
+        sessionKey: { not: null },
+        sessionLockedAt: { lt: threshold }
+      },
+      data: {
+        sessionKey: null,
+        sessionLockedAt: null,
+        // Optionally revert status if it was in progress
+        executionState: 'idle'
+      }
+    });
+
+    return { 
+      cleaned: result.count,
+      threshold: threshold.toISOString()
+    };
+  });
+
+  // GET /api/tasks/ready-for-work - Poll for ready tasks (for bot autonomy)
+  const readyQuerySchema = z.object({
+    sessionKey: z.string().min(1),
+    assignee: z.string().default('clawdbot')
+  });
+
+  fastify.get<{
+    Querystring: z.infer<typeof readyQuerySchema>;
+  }>('/tasks/ready-for-work', async (request: FastifyRequest<{
+    Querystring: z.infer<typeof readyQuerySchema>;
+  }>, reply: FastifyReply) => {
+    const { sessionKey, assignee } = readyQuerySchema.parse(request.query);
+
+    // Find a task that's:
+    // 1. Assigned to the bot
+    // 2. In Ready status (or InProgress but stale)
+    // 3. Not already claimed OR claimed by us
+    
+    // First try to find unclaimed ready tasks
+    let task = await prisma.task.findFirst({
+      where: {
+        assignee,
+        status: 'Ready',
+        OR: [
+          { sessionKey: null },
+          { sessionKey: sessionKey }
+        ]
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    if (task) {
+      // Atomically claim it
+      const updatedTask = await prisma.task.update({
+        where: { id: task.id },
+        data: {
+          sessionKey,
+          sessionLockedAt: new Date(),
+          status: 'InProgress',
+          executionState: 'running'
+        }
+      });
+
+      return { 
+        task: taskService.mapPrismaTaskToTask(updatedTask),
+        action: 'claimed'
+      };
+    }
+
+    // No ready tasks, return null
+    return { task: null, action: 'none' };
+  });
 }

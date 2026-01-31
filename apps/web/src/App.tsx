@@ -6,6 +6,7 @@ import { TaskDrawer } from './components/TaskDrawer';
 import { SummaryBar } from './components/SummaryBar';
 import { NewTaskModal } from './components/NewTaskModal';
 import { api } from './api/client';
+import { useWebSocket } from './hooks/useWebSocket';
 
 function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -29,6 +30,30 @@ function App() {
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  // WebSocket connection for live updates
+  useWebSocket({
+    onTaskCreated: (task) => {
+      setTasks(prev => {
+        // Avoid duplicates
+        if (prev.some(t => t.id === task.id)) return prev;
+        return [task, ...prev];
+      });
+    },
+    onTaskUpdated: (updatedTask) => {
+      setTasks(prev => prev.map(t => 
+        t.id === updatedTask.id ? updatedTask : t
+      ));
+      // Also update selected task if it's the one being viewed
+      setSelectedTask(prev => 
+        prev?.id === updatedTask.id ? updatedTask : prev
+      );
+    },
+    onTaskDeleted: (taskId) => {
+      setTasks(prev => prev.filter(t => t.id !== taskId));
+      setSelectedTask(prev => prev?.id === taskId ? null : prev);
+    }
+  });
 
   // Handle drag end
   const handleDragEnd = async (event: DragEndEvent) => {

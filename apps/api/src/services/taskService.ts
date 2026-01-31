@@ -2,6 +2,7 @@ import prisma from '../db/client';
 import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, ProgressLogEntry } from '../../../shared/src/types';
 import { emitAuditEvent } from './auditService';
 import { triggerWebhook } from './webhookService';
+import { emitTaskEvent, emitRunEvent, emitEventLogEvent } from '../wsServer';
 import { EXECUTION_STATES } from '../routes/tasks';
 
 export const TASK_STATUSES: TaskStatus[] = [
@@ -91,6 +92,9 @@ export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawd
     after: task
   });
 
+  // Emit WebSocket event
+  emitTaskEvent('task:created', mapPrismaTaskToTask(task));
+
   // Trigger webhook if assigned to clawdbot
   if (task.assignee === 'clawdbot') {
     await triggerWebhook('task.created', task);
@@ -168,6 +172,9 @@ export async function updateTask(id: string, input: UpdateTaskInput, actor: 'hum
     after: mapPrismaTaskToTask(task)
   });
 
+  // Emit WebSocket event
+  emitTaskEvent('task:updated', mapPrismaTaskToTask(task));
+
   // Trigger webhook if assigned to clawdbot
   if (task.assignee === 'clawdbot') {
     await triggerWebhook('task.updated', task);
@@ -209,6 +216,9 @@ export async function deleteTask(id: string, actor: 'human' | 'clawdbot' = 'huma
       actor,
       before
     });
+
+    // Emit WebSocket event
+    emitTaskEvent('task:deleted', before);
 
     return true;
   } catch (error) {
@@ -278,6 +288,16 @@ export async function createBotRun(
       startedAt: new Date()
     }
   });
+
+  // Emit WebSocket event
+  const task = await getTaskById(taskId);
+  if (task) {
+    emitRunEvent('run:created', {
+      ...run,
+      taskId,
+      task
+    });
+  }
   
   return { id: run.id };
 }
@@ -287,13 +307,19 @@ export async function completeBotRun(
   status: 'completed' | 'failed' | 'cancelled',
   summary?: string
 ): Promise<void> {
-  await prisma.botRun.update({
+  const run = await prisma.botRun.update({
     where: { id: runId },
     data: {
       status,
       endedAt: new Date(),
       summary
     }
+  });
+
+  // Emit WebSocket event
+  emitRunEvent('run:completed', {
+    ...run,
+    taskId: run.taskId
   });
 }
 
@@ -308,7 +334,7 @@ export async function getBotRunsForTask(taskId: string): Promise<unknown[]> {
 // Helper Functions
 // ============================================
 
-function mapPrismaTaskToTask(task: {
+export function mapPrismaTaskToTask(task: {
   id: string;
   title: string;
   description: string | null;
