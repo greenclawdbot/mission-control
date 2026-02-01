@@ -110,11 +110,20 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
       const mapped = taskService.mapPrismaTaskToTask(t as Parameters<typeof taskService.mapPrismaTaskToTask>[0]);
       const settings = await stageSettingsService.getEffectiveSettingForStage('Planning', t.projectId);
       const workFolder = t.project && !t.project.archivedAt ? t.project.folderPath : null;
+      const projectName = t.project && !t.project.archivedAt ? t.project.name : null;
       const model = settings.defaultModel && settings.defaultModel !== DEFAULT_MODEL ? settings.defaultModel : undefined;
+      const planningMessages = await taskService.getPlanningConversationForTask(t.id);
+      const planningConversationForPrompt =
+        planningMessages.length === 0
+          ? `Task: ${t.title}\n\nPlanning conversation so far:\n(no messages yet)`
+          : `Task: ${t.title}\n\nPlanning conversation so far:\n${planningMessages.map((m) => `[${m.role}] (${m.createdAt}):\n${m.content}`).join('\n\n')}`;
       return {
         task: mapped,
         planningPrompt: settings.systemPrompt ?? null,
+        planningConversationForPrompt,
+        planningConversation: planningMessages,
         workFolder,
+        ...(projectName != null && { projectName }),
         ...(model && { model })
       };
     }));
@@ -123,8 +132,8 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
 
   // POST /api/tasks/:id/planning-complete - External system sends plan; move task to configurable destination
   const planningCompleteSchema = z.object({
-    planChecklist: z.array(z.string()),
-    plan: z.string().optional()
+    plan: z.string().optional(),
+    planChecklist: z.array(z.string()).optional()
   });
   fastify.post<{
     Params: z.infer<typeof taskParamsSchema>;
@@ -133,18 +142,20 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
     Params: z.infer<typeof taskParamsSchema>;
     Body: z.infer<typeof planningCompleteSchema>;
   }>, reply: FastifyReply) => {
-    const { planChecklist } = planningCompleteSchema.parse(request.body);
+    const { plan, planChecklist } = planningCompleteSchema.parse(request.body);
     const taskId = request.params.id;
     const task = await taskService.getTaskById(taskId);
     if (!task) {
       return reply.status(404).send({ error: 'Task not found' });
     }
+    if (plan != null && plan.trim() !== '') {
+      await taskService.appendPlanningAssistantMessage(taskId, plan.trim());
+    }
     const settings = await stageSettingsService.getEffectiveSettingForStage('Planning', task.projectId);
     const destination = settings.planningDestinationStatus || 'Backlog';
-    const updated = await taskService.updateTask(taskId, {
-      planChecklist,
-      status: destination as TaskStatus
-    }, 'clawdbot');
+    const updatePayload: { status: TaskStatus; planChecklist?: string[] } = { status: destination as TaskStatus };
+    if (planChecklist != null) updatePayload.planChecklist = planChecklist;
+    const updated = await taskService.updateTask(taskId, updatePayload, 'clawdbot');
     if (!updated) {
       return reply.status(404).send({ error: 'Task not found' });
     }
@@ -193,6 +204,41 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
     }
     const { content } = postConversationSchema.parse(request.body);
     const message = await taskService.appendUserMessage(request.params.id, content);
+    return reply.status(201).send({ message });
+  });
+
+  // GET /api/tasks/:id/planning-conversation - Get planning conversation messages for a task
+  fastify.get<{
+    Params: z.infer<typeof taskParamsSchema>;
+  }>('/tasks/:id/planning-conversation', async (request: FastifyRequest<{ Params: z.infer<typeof taskParamsSchema> }>, reply: FastifyReply) => {
+    const task = await taskService.getTaskById(request.params.id);
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+    const messages = await taskService.getPlanningConversationForTask(request.params.id);
+    return { messages };
+  });
+
+  // POST /api/tasks/:id/planning-conversation - Append a user message to the planning conversation; if task is not in Planning, move to Planning to queue for planner
+  const postPlanningConversationSchema = z.object({
+    content: z.string().min(1)
+  });
+  fastify.post<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof postPlanningConversationSchema>;
+  }>('/tasks/:id/planning-conversation', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof postPlanningConversationSchema>;
+  }>, reply: FastifyReply) => {
+    const task = await taskService.getTaskById(request.params.id);
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+    const { content } = postPlanningConversationSchema.parse(request.body);
+    const message = await taskService.appendPlanningUserMessage(request.params.id, content);
+    if (task.status !== 'Planning') {
+      await taskService.updateTask(request.params.id, { status: 'Planning' }, 'human');
+    }
     return reply.status(201).send({ message });
   });
 
@@ -630,6 +676,7 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
         readyPrompt,
         conversationForPrompt: conversationBlock,
         conversation: messages,
+        planDocument: updatedTask.planDocument ?? null,
         workFolder,
         ...(projectName != null && { projectName }),
         ...(model && { model })

@@ -1,5 +1,5 @@
 import prisma from '../db/client';
-import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, ProgressLogEntry, Priority, TaskConversationMessage } from '@shared/src/types';
+import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, ProgressLogEntry, Priority, TaskConversationMessage, TaskPlanningMessage } from '@shared/src/types';
 import { emitAuditEvent } from './auditService';
 import { triggerWebhook } from './webhookService';
 import { emitTaskEvent } from '../sseServer';
@@ -494,6 +494,62 @@ export async function appendAssistantMessage(
 }
 
 // ============================================
+// Task Planning Conversation (separate thread for planning phase)
+// ============================================
+
+function mapPrismaPlanningMessageToMessage(msg: {
+  id: string;
+  taskId: string;
+  role: string;
+  content: string;
+  createdAt: Date;
+}): TaskPlanningMessage {
+  return {
+    id: msg.id,
+    taskId: msg.taskId,
+    role: msg.role as 'user' | 'assistant',
+    content: msg.content,
+    createdAt: msg.createdAt.toISOString()
+  };
+}
+
+export async function getPlanningConversationForTask(taskId: string): Promise<TaskPlanningMessage[]> {
+  const messages = await prisma.taskPlanningMessage.findMany({
+    where: { taskId },
+    orderBy: { createdAt: 'asc' }
+  });
+  return messages.map((m) => mapPrismaPlanningMessageToMessage(m));
+}
+
+export async function appendPlanningUserMessage(taskId: string, content: string): Promise<TaskPlanningMessage> {
+  const msg = await prisma.taskPlanningMessage.create({
+    data: {
+      taskId,
+      role: 'user',
+      content,
+      createdAt: new Date()
+    }
+  });
+  return mapPrismaPlanningMessageToMessage(msg);
+}
+
+export async function appendPlanningAssistantMessage(taskId: string, content: string): Promise<TaskPlanningMessage> {
+  const msg = await prisma.taskPlanningMessage.create({
+    data: {
+      taskId,
+      role: 'assistant',
+      content,
+      createdAt: new Date()
+    }
+  });
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { planDocument: content }
+  });
+  return mapPrismaPlanningMessageToMessage(msg);
+}
+
+// ============================================
 // Helper Functions
 // ============================================
 
@@ -524,6 +580,7 @@ export function mapPrismaTaskToTask(task: {
   completedAt: Date | null;
   dueDate: Date | null;
   results: string | null;
+  planDocument: string | null;
   commits: any;
   sessionKey: string | null;
   sessionLockedAt: Date | null;
@@ -563,6 +620,7 @@ export function mapPrismaTaskToTask(task: {
     completedAt: task.completedAt?.toISOString(),
     dueDate: task.dueDate?.toISOString(),
     results: task.results || undefined,
+    planDocument: task.planDocument ?? undefined,
     commits: task.commits || undefined,
     sessionKey: task.sessionKey,
     sessionLockedAt: task.sessionLockedAt?.toISOString(),
