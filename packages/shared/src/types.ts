@@ -125,6 +125,7 @@ export interface Task {
 
   // Work Output (for auditability + review)
   results?: string;  // Markdown summary of work done
+  planDocument?: string | null;  // Current plan from planning conversation (updated on planning-complete)
   commits?: Array<{
     sha: string;
     message: string;
@@ -171,6 +172,17 @@ export interface TaskConversationMessage {
   content: string;
   createdAt: string;
   botRunId?: string | null;
+}
+
+// ============================================
+// Task Planning Message (planning conversation thread)
+// ============================================
+export interface TaskPlanningMessage {
+  id: string;
+  taskId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
 }
 
 // ============================================
