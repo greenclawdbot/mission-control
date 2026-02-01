@@ -119,6 +119,12 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
   const handlePointerUp = (e: React.PointerEvent) => {
     if (!clickStart) return;
 
+    // Don't trigger click if we were dragging
+    if (isDragging) {
+      setClickStart(null);
+      return;
+    }
+
     const dx = Math.abs(e.clientX - clickStart.x);
     const dy = Math.abs(e.clientY - clickStart.y);
     const threshold = 5; // pixels
