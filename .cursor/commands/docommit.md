@@ -87,6 +87,8 @@ Scope should be the area of the codebase affected. For the Mission Control monor
 
 ## What to Do
 
+**Important:** You must **execute** the commit plan. Do not stop after writing the message or showing a "Ready to commit" snippet—run the actual `git add` and `git commit` commands (request `git_write` permission when needed) so the commits are created. Only show the plan and ask the user to run it if they explicitly ask for a dry run or preview.
+
 ### 1. Analyze Staged Changes
 
 - Review `git status` to see what files are staged
@@ -130,6 +132,13 @@ Scope should be the area of the codebase affected. For the Mission Control monor
 - Check for typos and clarity
 - Confirm all related changes are included
 - For monorepo: ensure changes belong to the same logical unit
+
+### 7. Execute the Commits
+
+- **Run the commits.** Stage the appropriate files (`git add`) and run `git commit` with the message(s) you planned. Use the terminal with `git_write` permission.
+- For a **single commit**: if everything is already staged, run `git commit -m "..."` (and `-m "..."` for body/footer). If you need to stage first, run `git add <paths>` then `git commit`.
+- For **multiple commits**: run `git reset` to unstage, then for each logical group run `git add <paths>` and `git commit -m "..."` in sequence.
+- After executing, briefly confirm what was committed (e.g. "Committed 3 commits: …").
 
 ---
 
@@ -293,49 +302,40 @@ Migration: 20260131051416_add_results_and_commits.
 
 ## Output Format
 
-When creating commits, provide:
+When creating commits:
 
-1. **Commit Message** (formatted according to spec)
-2. **Files Changed** (summary of what's included)
-3. **Rationale** (why these changes belong together)
-4. **Suggestions** (if changes should be split into multiple commits)
+1. **Plan:** Commit message (formatted according to spec), files changed, rationale, and any suggestion to split.
+2. **Execute:** Run the actual `git add` and `git commit` commands so the commits are created. Request `git_write` permission for the terminal.
+3. **Confirm:** After running, briefly state what was committed.
 
-### Example Output
+Do not stop at "Ready to commit" or ask the user to run the commands—execute them yourself unless the user asked for a dry run or preview only.
 
-**Commit Message:**
+### Example (single commit, already staged)
 
-```
-feat(web): add task filtering by status
+**Plan:** feat(web): add task filtering by status. Files: App.tsx, SummaryBar.tsx, client.ts. Rationale: one feature.
 
-Add status filter dropdown to board view. Calls GET /api/v1/tasks
-with status query param. Updates api client and App state.
-
-Fixes #8
-```
-
-**Files Changed:**
-
-- `apps/web/src/App.tsx`
-- `apps/web/src/components/SummaryBar.tsx`
-- `apps/web/src/api/client.ts` (add status param)
-
-**Rationale:**
-
-All changes are part of the same feature and should be committed
-together as an atomic unit.
-
-**Ready to commit:**
-
+**Execute:** Run:
 ```bash
 git commit -m "feat(web): add task filtering by status" \
   -m "Add status filter dropdown to board view. Calls GET /api/v1/tasks with status query param. Updates api client and App state." \
   -m "Fixes #8"
 ```
 
+**Confirm:** "Committed 1 commit: feat(web): add task filtering by status."
+
+### Example (multiple commits)
+
+**Plan:** Split into 3 commits: shared type, API param, web UI. Rationale: atomic monorepo commits.
+
+**Execute:** Run in sequence: `git reset`, then for each group `git add <paths>` and `git commit -m "..."`.
+
+**Confirm:** "Committed 3 commits: feat(shared): …, feat(api): …, feat(web): …."
+
 ---
 
 ## Constraints
 
+- **Execute the plan** – Run `git add` and `git commit` yourself so commits are created; do not leave it to the user unless they asked for a dry run or preview only.
 - **Never commit secrets or credentials** – Check for API keys, passwords, tokens, DATABASE_URL with real credentials
 - **Never commit generated files** – Unless they're part of the build (e.g. Prisma client in node_modules is ignored)
 - **Never commit large binary files** – Use Git LFS or external storage
@@ -354,7 +354,7 @@ If you have multiple unrelated changes staged:
 
 1. Identify logical groups of changes
 2. Unstage everything: `git reset`
-3. Stage and commit each group separately with appropriate messages
+3. Stage and commit each group separately with appropriate messages (run these commands yourself—do not stop at showing the plan)
 4. Review commit history: `git log --oneline` to verify organization
 
 ### Example (Monorepo):
