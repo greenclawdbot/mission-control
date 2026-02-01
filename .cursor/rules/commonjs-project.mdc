@@ -1,0 +1,12 @@
+---
+description: This repo uses CommonJS for the API.
+alwaysApply: true
+---
+
+# CommonJS API
+
+The API (`apps/api`) is a CommonJS project. Its `tsconfig` uses `"module": "commonjs"`.
+
+- Do not use ESM-only features in the API (e.g. no `import.meta`).
+- Use Node/CommonJS patterns (`__dirname`, `__filename` where needed).
+- Keep this in mind when adding or changing API code so the API continues to compile with `tsc` and run as CommonJS.
