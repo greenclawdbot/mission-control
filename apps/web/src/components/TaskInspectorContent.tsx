@@ -29,10 +29,10 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
   const [task, setTask] = useState(initialTask);
   const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'conversation' | 'planning' | 'results' | 'runs' | 'activity' | 'state'>('details');
   
-  // Sync local state when initialTask changes (e.g., clicking different card)
+  // Sync local state when initialTask changes (e.g., clicking different card or task updated via SSE)
   useEffect(() => {
     setTask(initialTask);
-  }, [initialTask.id]);
+  }, [initialTask.id, initialTask.updatedAt]);
   const [editing, setEditing] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [auditEvents, setAuditEvents] = useState<unknown[]>([]);
@@ -87,6 +87,16 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
     };
     fetchData();
   }, [task.id]);
+
+  // When task is updated from parent (e.g. SSE task:updated), refetch planning conversation so Planning tab shows new assistant message
+  useEffect(() => {
+    if (!task.id) return;
+    let cancelled = false;
+    api.getTaskPlanningConversation(task.id).then((res) => {
+      if (!cancelled) setPlanningMessages(res.messages);
+    });
+    return () => { cancelled = true; };
+  }, [task.id, task.updatedAt]);
 
   const optimisticUpdate = useCallback((updates: Partial<Task>) => {
     setTask(prev => prev ? { ...prev, ...updates } : prev);
@@ -663,7 +673,7 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
 
         {activeTab === 'plan' && (
           <div>
-            {task.planDocument && task.planDocument.trim() && (
+            {task.planDocument && task.planDocument.trim() ? (
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                   CURRENT PLAN
@@ -679,6 +689,15 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
                   }}
                   dangerouslySetInnerHTML={{ __html: marked.parse(task.planDocument) }}
                 />
+              </div>
+            ) : (
+              <div className="empty-state" style={{ marginBottom: '20px' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                  No plan yet. The plan will appear here when the planner bot completes and sends the plan via <strong>POST /tasks/:id/planning-complete</strong> with a <code>plan</code> field in the body.
+                </p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '8px' }}>
+                  If the task was moved to Backlog but no plan appears, the agent may have called planning-complete without including the <code>plan</code> payload.
+                </p>
               </div>
             )}
             {/* Progress Overview */}
