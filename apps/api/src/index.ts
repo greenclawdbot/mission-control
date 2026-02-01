@@ -1,12 +1,9 @@
 import { buildApp } from './app';
 import { mkdirSync, writeFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { config } from 'dotenv';
 
-// Load .env from monorepo root (apps/api/src -> up 3 levels)
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// In CommonJS output, __dirname is apps/api/dist; go up to monorepo root
 const projectRoot = join(__dirname, '..', '..', '..');
 config({ path: join(projectRoot, '.env') });
 

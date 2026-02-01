@@ -2,17 +2,15 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { taskRoutes } from './routes/tasks';
 import { auditRoutes } from './routes/audit';
+import { projectRoutes } from './routes/projects';
+import { settingsRoutes } from './routes/settings';
 import { registerGitHubRoutes } from './routes/github';
 import { addSSEClient, removeSSEClient, emitTaskEvent, emitRunEvent, emitPulseEvent, startPulseEmitter } from './sseServer';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Calculate project root (up from apps/api to mission-control)
-const projectRoot = path.resolve(__dirname, '..', '..');
+// In CommonJS output, __dirname is apps/api/dist; go up to monorepo root
+const projectRoot = path.resolve(__dirname, '..', '..', '..');
 
 export async function buildApp() {
   const fastify = Fastify({
@@ -28,6 +26,8 @@ export async function buildApp() {
   // API Routes
   await fastify.register(taskRoutes, { prefix: '/api/v1' });
   await fastify.register(auditRoutes, { prefix: '/api/v1' });
+  await fastify.register(projectRoutes, { prefix: '/api/v1' });
+  await fastify.register(settingsRoutes, { prefix: '/api/v1' });
   await fastify.register(registerGitHubRoutes);
 
   // Health check
