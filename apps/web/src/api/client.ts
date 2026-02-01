@@ -1,4 +1,4 @@
-import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, TaskStateLog } from '../shared-types';
+import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, TaskStateLog, Project, EffectiveStageSettings, StageSettingRow } from '../shared-types';
 
 const base = (import.meta.env?.VITE_API_URL ?? '').toString().trim().replace(/\/$/, '');
 const API_BASE = base ? `${base}/api/v1` : '/api/v1';
@@ -32,12 +32,14 @@ export const api = {
     assignee?: string;
     priority?: string;
     tags?: string;
+    projectId?: string;
   }): Promise<{ tasks: Task[] }> {
     const params = new URLSearchParams();
     if (filters?.status) params.append('status', filters.status);
     if (filters?.assignee) params.append('assignee', filters.assignee);
     if (filters?.priority) params.append('priority', filters.priority);
     if (filters?.tags) params.append('tags', filters.tags);
+    if (filters?.projectId) params.append('projectId', filters.projectId);
 
     const url = `${API_BASE}/tasks${params.toString() ? `?${params.toString()}` : ''}`;
     return fetchJson(url);
@@ -96,6 +98,74 @@ export const api = {
   async clearDemoData(): Promise<{ deleted: number }> {
     return fetchJson(`${API_BASE}/tasks/clear-demo`, {
       method: 'DELETE'
+    });
+  },
+
+  // Projects
+  async getProjects(archived?: boolean): Promise<{ projects: Project[] }> {
+    const params = new URLSearchParams();
+    if (archived === true) params.append('archived', 'true');
+    if (archived === false) params.append('archived', 'false');
+    const url = `${API_BASE}/projects${params.toString() ? `?${params.toString()}` : ''}`;
+    return fetchJson(url);
+  },
+
+  async getProject(id: string): Promise<{ project: Project }> {
+    return fetchJson(`${API_BASE}/projects/${id}`);
+  },
+
+  async createProject(data: { name: string; folderPath: string }): Promise<{ project: Project }> {
+    return fetchJson(`${API_BASE}/projects`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async updateProject(id: string, data: { name?: string; folderPath?: string }): Promise<{ project: Project }> {
+    return fetchJson(`${API_BASE}/projects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async setProjectPath(id: string, folderPath: string): Promise<{ project: Project }> {
+    return fetchJson(`${API_BASE}/projects/${id}/path`, {
+      method: 'PUT',
+      body: JSON.stringify({ folderPath })
+    });
+  },
+
+  async archiveProject(id: string): Promise<{ project: Project }> {
+    return fetchJson(`${API_BASE}/projects/${id}`, {
+      method: 'DELETE'
+    });
+  },
+
+  // Stage settings (prompts per stage)
+  async getStageSettings(projectId?: string | null): Promise<{ settings: EffectiveStageSettings }> {
+    const params = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+    return fetchJson(`${API_BASE}/settings/stages${params}`);
+  },
+
+  async getGlobalStageSettings(): Promise<{ settings: StageSettingRow[] }> {
+    return fetchJson(`${API_BASE}/settings/stages/global`);
+  },
+
+  async updateGlobalStageSettings(updates: Record<string, { systemPrompt?: string | null; defaultModel?: string | null; planningDestinationStatus?: string | null; readyInstructions?: string | null }>): Promise<{ settings: StageSettingRow[] }> {
+    return fetchJson(`${API_BASE}/settings/stages/global`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates)
+    });
+  },
+
+  async getProjectStageOverrides(projectId: string): Promise<{ settings: StageSettingRow[] }> {
+    return fetchJson(`${API_BASE}/settings/stages/projects/${projectId}`);
+  },
+
+  async updateProjectStageOverrides(projectId: string, updates: Record<string, { systemPrompt?: string | null; defaultModel?: string | null; planningDestinationStatus?: string | null; readyInstructions?: string | null }>): Promise<{ settings: StageSettingRow[] }> {
+    return fetchJson(`${API_BASE}/settings/stages/projects/${projectId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates)
     });
   }
 };

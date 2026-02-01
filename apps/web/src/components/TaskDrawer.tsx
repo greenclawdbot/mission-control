@@ -331,7 +331,8 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
         borderBottom: '1px solid var(--border-color)',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'flex-start'
+        alignItems: 'flex-start',
+        flexShrink: 0
       }}>
         <div style={{ flex: 1 }}>
           {editing ? (
@@ -381,7 +382,8 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
         gap: '8px',
         flexWrap: 'wrap',
         alignItems: 'center',
-        background: 'var(--bg-secondary)'
+        background: 'var(--bg-secondary)',
+        flexShrink: 0
       }}>
         {task.needsApproval ? (
           <button 
@@ -454,7 +456,8 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
       <div style={{
         display: 'flex',
         borderBottom: '1px solid var(--border-color)',
-        padding: '0 20px'
+        padding: '0 20px',
+        flexShrink: 0
       }}>
         {(['details', 'plan', 'results', 'runs', 'activity', 'state'] as const).map(tab => (
           <button
@@ -477,7 +480,7 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '20px' }}>
         {activeTab === 'details' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {/* Execution State Info */}
@@ -1197,7 +1200,8 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
         borderTop: '1px solid var(--border-color)',
         display: 'flex',
         gap: '12px',
-        justifyContent: 'flex-end'
+        justifyContent: 'flex-end',
+        flexShrink: 0
       }}>
         {editing ? (
           <>

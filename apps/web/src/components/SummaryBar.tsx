@@ -105,7 +105,8 @@ export function SummaryBar({ tasks, nextCheck }: SummaryBarProps) {
       borderBottom: '1px solid var(--border-color)',
       display: 'flex',
       gap: '48px',
-      background: 'var(--bg-secondary)'
+      background: 'var(--bg-secondary)',
+      flexShrink: 0
     }}>
       <div>
         <div style={{ 

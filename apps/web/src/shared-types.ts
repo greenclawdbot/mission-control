@@ -52,6 +52,18 @@ export type Priority = 'Low' | 'Medium' | 'High' | 'Critical';
 export const PRIORITIES: Priority[] = ['Low', 'Medium', 'High', 'Critical'];
 
 // ============================================
+// Project Interface
+// ============================================
+export interface Project {
+  id: string;
+  name: string;
+  folderPath: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string | null;
+}
+
+// ============================================
 // Task Interface
 // ============================================
 export interface Task {
@@ -63,6 +75,7 @@ export interface Task {
   assignee?: string;
   priority: Priority;
   tags: string[];
+  projectId?: string | null;
   
   // Bot Observability
   planChecklist: string[];
@@ -183,6 +196,7 @@ export interface CreateTaskInput {
   planChecklist?: string[];
   needsApproval?: boolean;
   blockedBy?: string[];
+  projectId?: string | null;
 }
 
 export interface UpdateTaskInput {
@@ -204,6 +218,7 @@ export interface UpdateTaskInput {
   approvedAt?: string;
   approvedBy?: string;
   results?: string;
+  projectId?: string | null;
   commits?: Array<{
     sha: string;
     message: string;
@@ -222,6 +237,7 @@ export interface TaskFilters {
   assignee?: string;
   priority?: Priority;
   tags?: string[];
+  projectId?: string;
 }
 
 // ============================================
@@ -244,4 +260,30 @@ export interface Column {
   status: TaskStatus;
   tasks: Task[];
   taskCount: number;
+}
+
+// ============================================
+// Stage Settings (prompts per Kanban stage)
+// ============================================
+export type StageSettingScope = 'global' | 'project';
+
+export interface StageSettingRow {
+  id: string;
+  scope: StageSettingScope;
+  projectId: string | null;
+  stage: TaskStatus;
+  systemPrompt: string | null;
+  defaultModel: string | null;
+  planningDestinationStatus: string | null;
+  readyInstructions: string | null;
+}
+
+/** Effective settings for a project (merged: project override or global). One per stage. */
+export interface EffectiveStageSettings {
+  [stage: string]: {
+    systemPrompt: string | null;
+    defaultModel: string | null;
+    planningDestinationStatus: string | null;
+    readyInstructions: string | null;
+  };
 }

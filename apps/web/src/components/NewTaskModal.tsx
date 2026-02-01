@@ -1,22 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Task, PRIORITIES, TASK_STATUSES } from '../shared-types';
 import { api } from '../api/client';
 
 interface NewTaskModalProps {
   onClose: () => void;
   onCreated: (task: Task) => void;
+  projects?: { id: string; name: string }[];
+  defaultProjectId?: string | null;
 }
 
-export function NewTaskModal({ onClose, onCreated }: NewTaskModalProps) {
+export function NewTaskModal({ onClose, onCreated, projects = [], defaultProjectId }: NewTaskModalProps) {
   const [form, setForm] = useState({
     title: '',
     description: '',
     priority: 'Medium' as typeof PRIORITIES[number],
     assignee: 'clawdbot',
     tags: '',
-    estimate: ''
+    estimate: '',
+    projectId: defaultProjectId ?? ''
   });
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    setForm(f => ({ ...f, projectId: defaultProjectId ?? '' }));
+  }, [defaultProjectId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +37,8 @@ export function NewTaskModal({ onClose, onCreated }: NewTaskModalProps) {
         priority: form.priority,
         assignee: form.assignee,
         tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
-        estimate: form.estimate ? parseFloat(form.estimate) : undefined
+        estimate: form.estimate ? parseFloat(form.estimate) : undefined,
+        projectId: form.projectId || undefined
       });
       onCreated(response.task);
     } catch (error) {
@@ -137,6 +145,30 @@ export function NewTaskModal({ onClose, onCreated }: NewTaskModalProps) {
                 style={{ minHeight: '80px' }}
               />
             </div>
+
+            {/* Project (optional) */}
+            {projects.length > 0 && (
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ 
+                  display: 'block', 
+                  fontSize: '13px', 
+                  color: 'var(--text-secondary)',
+                  marginBottom: '8px' 
+                }}>
+                  Project
+                </label>
+                <select
+                  className="input select"
+                  value={form.projectId}
+                  onChange={e => setForm(f => ({ ...f, projectId: e.target.value }))}
+                >
+                  <option value="">None</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Assignee Toggle & Priority Row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
