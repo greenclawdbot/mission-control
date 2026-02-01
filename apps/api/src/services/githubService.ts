@@ -32,7 +32,7 @@ export class GitHubService {
   async getUserRepos(): Promise<GitHubRepo[]> {
     const { stdout } = await execAsync('gh repo list --limit 50 --json');
     const repos = JSON.parse(stdout);
-    return repos.map(repo => ({
+    return repos.map((repo: { name?: string; owner?: { login?: string }; description?: string; private?: boolean; language?: string; default_branch?: string; clone_url?: string; ssh_url?: string }) => ({
       name: repo.name,
       owner: repo.owner?.login || 'unknown',
       description: repo.description || undefined,

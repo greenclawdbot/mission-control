@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import type { Task, BotRun } from '../../../shared/src/types';
+import type { Task, BotRun } from '@shared/src/types';
 
 // ============================================
 // WebSocket Server for Live Updates

@@ -1,9 +1,12 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import * as taskService from '../services/taskService';
+import * as stageSettingsService from '../services/stageSettingsService';
 import prisma from '../db/client';
-import { Task, TaskStatus, ExecutionState, CreateTaskInput, UpdateTaskInput } from '../../shared/src/types';
+import { Task, TaskStatus, ExecutionState, CreateTaskInput, UpdateTaskInput } from '@shared/src/types';
 import { emitTaskEvent } from '../sseServer';
+
+const DEFAULT_MODEL = 'minimax';
 
 const taskParamsSchema = z.object({
   id: z.string().uuid()
@@ -19,13 +22,14 @@ const createTaskSchema = z.object({
   dueDate: z.string().optional(),
   planChecklist: z.array(z.string()).optional(),
   needsApproval: z.boolean().optional(),
-  blockedBy: z.array(z.string()).optional()
+  blockedBy: z.array(z.string()).optional(),
+  projectId: z.string().uuid().nullable().optional()
 });
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
-  status: z.enum(['New', 'Planning', 'Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done']).optional(),
+  status: z.enum(['New', 'Planning', 'Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Failed', 'Done']).optional(),
   executionState: z.enum(['queued', 'running', 'waiting', 'idle', 'failed', 'completed']).optional(),
   assignee: z.string().optional(),
   sessionKey: z.string().nullable().optional(),
@@ -42,6 +46,7 @@ const updateTaskSchema = z.object({
   approvedAt: z.string().optional(),
   approvedBy: z.string().optional(),
   results: z.string().optional(),
+  projectId: z.string().uuid().nullable().optional(),
   commits: z.array(z.object({
     sha: z.string(),
     message: z.string(),
@@ -51,15 +56,16 @@ const updateTaskSchema = z.object({
 });
 
 const moveTaskSchema = z.object({
-  status: z.enum(['New', 'Planning', 'Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done'])
+  status: z.enum(['New', 'Planning', 'Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Failed', 'Done'])
 });
 
 const querySchema = z.object({
-  status: z.enum(['New', 'Planning', 'Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Done']).optional(),
+  status: z.enum(['New', 'Planning', 'Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Failed', 'Done']).optional(),
   executionState: z.enum(['queued', 'running', 'waiting', 'idle', 'failed', 'completed']).optional(),
   assignee: z.string().optional(),
   priority: z.string().optional(),
-  tags: z.string().optional()
+  tags: z.string().optional(),
+  projectId: z.string().uuid().optional()
 });
 
 export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
@@ -67,17 +73,81 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get<{
     Querystring: z.infer<typeof querySchema>;
   }>('/tasks', async (request: FastifyRequest<{ Querystring: z.infer<typeof querySchema> }>, reply: FastifyReply) => {
-    const { status, executionState, assignee, priority, tags } = request.query;
+    const { status, executionState, assignee, priority, tags, projectId } = request.query;
 
     const tasks = await taskService.getAllTasks({
       status,
       executionState,
       assignee,
       priority,
-      tags
+      tags,
+      projectId
     });
 
     return { tasks };
+  });
+
+  // GET /api/tasks/planning-items - List tasks in Planning for external polling (no claiming)
+  const planningItemsQuerySchema = z.object({
+    projectId: z.string().uuid().optional()
+  });
+  fastify.get<{
+    Querystring: z.infer<typeof planningItemsQuerySchema>;
+  }>('/tasks/planning-items', async (request: FastifyRequest<{ Querystring: z.infer<typeof planningItemsQuerySchema> }>, reply: FastifyReply) => {
+    const { projectId } = planningItemsQuerySchema.parse(request.query);
+    const where: { status: string; projectId?: string | null } = { status: 'Planning' };
+    if (projectId) where.projectId = projectId;
+    const tasks = await prisma.task.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      include: {
+        progressLog: { orderBy: { completedAt: 'desc' } },
+        project: true
+      }
+    });
+    const items = await Promise.all(tasks.map(async (t) => {
+      const mapped = taskService.mapPrismaTaskToTask(t as Parameters<typeof taskService.mapPrismaTaskToTask>[0]);
+      const settings = await stageSettingsService.getEffectiveSettingForStage('Planning', t.projectId);
+      const workFolder = t.project && !t.project.archivedAt ? t.project.folderPath : null;
+      const model = settings.defaultModel && settings.defaultModel !== DEFAULT_MODEL ? settings.defaultModel : undefined;
+      return {
+        task: mapped,
+        planningPrompt: settings.systemPrompt ?? null,
+        workFolder,
+        ...(model && { model })
+      };
+    }));
+    return { items };
+  });
+
+  // POST /api/tasks/:id/planning-complete - External system sends plan; move task to configurable destination
+  const planningCompleteSchema = z.object({
+    planChecklist: z.array(z.string()),
+    plan: z.string().optional()
+  });
+  fastify.post<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof planningCompleteSchema>;
+  }>('/tasks/:id/planning-complete', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof planningCompleteSchema>;
+  }>, reply: FastifyReply) => {
+    const { planChecklist } = planningCompleteSchema.parse(request.body);
+    const taskId = request.params.id;
+    const task = await taskService.getTaskById(taskId);
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+    const settings = await stageSettingsService.getEffectiveSettingForStage('Planning', task.projectId);
+    const destination = settings.planningDestinationStatus || 'Backlog';
+    const updated = await taskService.updateTask(taskId, {
+      planChecklist,
+      status: destination as TaskStatus
+    }, 'clawdbot');
+    if (!updated) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+    return { task: updated };
   });
 
   // GET /api/tasks/:id - Get single task
@@ -288,7 +358,7 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
       // Delete in correct order due to foreign key constraints
       await prisma.taskProgressLogEntry.deleteMany({});
       await prisma.taskStateLog.deleteMany({});
-      await prisma.auditLogEntry.deleteMany({});
+      await prisma.auditEvent.deleteMany({});
       await prisma.botRun.deleteMany({});
       const result = await prisma.task.deleteMany({});
       return { deleted: result.count };
@@ -356,7 +426,7 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
     });
 
     // Emit SSE event so clients know the task was claimed
-    const mappedTask = taskService.mapPrismaTaskToTask(updatedTask);
+    const mappedTask = taskService.mapPrismaTaskToTask(updatedTask as Parameters<typeof taskService.mapPrismaTaskToTask>[0]);
     emitTaskEvent('task:updated', mappedTask);
 
     return { 
@@ -403,7 +473,7 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
     // Re-fetch and emit SSE event so clients know the task was released
     const releasedTask = await prisma.task.findUnique({ where: { id: taskId } });
     if (releasedTask) {
-      emitTaskEvent('task:updated', taskService.mapPrismaTaskToTask(releasedTask));
+      emitTaskEvent('task:updated', taskService.mapPrismaTaskToTask(releasedTask as Parameters<typeof taskService.mapPrismaTaskToTask>[0]));
     }
 
     return { released: true };
@@ -468,7 +538,8 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
           { sessionKey: sessionKey }
         ]
       },
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: 'asc' },
+      include: { project: true }
     });
 
     if (task) {
@@ -484,21 +555,30 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
         include: {
           progressLog: {
             orderBy: { completedAt: 'desc' }
-          }
+          },
+          project: true
         }
       });
 
       // Emit SSE event for real-time updates
-      const mappedTask = taskService.mapPrismaTaskToTask(updatedTask);
+      const mappedTask = taskService.mapPrismaTaskToTask(updatedTask as Parameters<typeof taskService.mapPrismaTaskToTask>[0]);
       try {
         emitTaskEvent('task:updated', mappedTask);
       } catch (err) {
         console.error('SSE emit error:', err);
       }
 
-      return { 
+      const readySettings = await stageSettingsService.getEffectiveSettingForStage('Ready', updatedTask.projectId);
+      const readyPrompt = readySettings.readyInstructions ?? readySettings.systemPrompt ?? null;
+      const workFolder = updatedTask.project && !updatedTask.project.archivedAt ? updatedTask.project.folderPath : null;
+      const model = readySettings.defaultModel && readySettings.defaultModel !== DEFAULT_MODEL ? readySettings.defaultModel : undefined;
+
+      return {
         task: mappedTask,
-        action: 'claimed'
+        action: 'claimed',
+        readyPrompt,
+        workFolder,
+        ...(model && { model })
       };
     }
 
@@ -545,7 +625,7 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
       });
 
       // Emit SSE event for real-time updates
-      const mappedTask = taskService.mapPrismaTaskToTask(updatedTask);
+      const mappedTask = taskService.mapPrismaTaskToTask(updatedTask as Parameters<typeof taskService.mapPrismaTaskToTask>[0]);
       try {
         emitTaskEvent('task:updated', mappedTask);
       } catch (err) {

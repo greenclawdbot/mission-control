@@ -1,4 +1,4 @@
-import { Task } from '../../../shared/src/types';
+import { Task } from '@shared/src/types';
 
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 

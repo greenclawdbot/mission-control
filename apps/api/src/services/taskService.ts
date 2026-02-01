@@ -1,10 +1,8 @@
 import prisma from '../db/client';
-import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, ProgressLogEntry } from '../../../shared/src/types';
+import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, ProgressLogEntry, Priority } from '@shared/src/types';
 import { emitAuditEvent } from './auditService';
 import { triggerWebhook } from './webhookService';
-import { emitTaskEvent, emitRunEvent } from '../app';
-import { EXECUTION_STATES } from '../routes/tasks';
-
+import { emitTaskEvent } from '../sseServer';
 export const TASK_STATUSES: TaskStatus[] = [
   'New',
   'Planning',
@@ -13,6 +11,7 @@ export const TASK_STATUSES: TaskStatus[] = [
   'InProgress',
   'Blocked',
   'Review',
+  'Failed',
   'Done'
 ];
 
@@ -95,7 +94,8 @@ export async function getAllTasks(filters?: {
   executionState?: ExecutionState;
   assignee?: string;
   priority?: string;
-  tags?: string[];
+  tags?: string;
+  projectId?: string;
 }): Promise<Task[]> {
   const where: Record<string, unknown> = {};
 
@@ -104,6 +104,7 @@ export async function getAllTasks(filters?: {
   if (filters?.assignee) where.assignee = filters.assignee;
   if (filters?.priority) where.priority = filters.priority;
   if (filters?.tags && filters.tags.length > 0) where.tags = { hasSome: filters.tags.split(',') };
+  if (filters?.projectId) where.projectId = filters.projectId;
 
   const tasks = await prisma.task.findMany({
     where,
@@ -115,7 +116,7 @@ export async function getAllTasks(filters?: {
     }
   });
 
-  return tasks.map(mapPrismaTaskToTask);
+  return tasks.map(t => mapPrismaTaskToTask(t as Parameters<typeof mapPrismaTaskToTask>[0]));
 }
 
 export async function getTaskById(id: string): Promise<Task | null> {
@@ -128,7 +129,7 @@ export async function getTaskById(id: string): Promise<Task | null> {
     }
   });
 
-  return task ? mapPrismaTaskToTask(task) : null;
+  return task ? mapPrismaTaskToTask(task as Parameters<typeof mapPrismaTaskToTask>[0]) : null;
 }
 
 export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawdbot' = 'human'): Promise<Task> {
@@ -149,7 +150,8 @@ export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawd
       blockedBy: input.blockedBy || [],
       executionState: 'queued',
       status,
-      currentStateStartedAt: new Date()
+      currentStateStartedAt: new Date(),
+      projectId: input.projectId ?? null
     },
     include: {
       progressLog: {
@@ -176,11 +178,12 @@ export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawd
   // SSE is only used for real-time updates from OTHER clients.
 
   // Trigger webhook if assigned to clawdbot
+  const mapped = mapPrismaTaskToTask(task as Parameters<typeof mapPrismaTaskToTask>[0]);
   if (task.assignee === 'clawdbot') {
-    await triggerWebhook('task.created', task);
+    await triggerWebhook('task.created', mapped);
   }
 
-  return mapPrismaTaskToTask(task);
+  return mapped;
 }
 
 export async function updateTask(id: string, input: UpdateTaskInput, actor: 'human' | 'clawdbot' = 'human'): Promise<Task | null> {
@@ -237,6 +240,7 @@ export async function updateTask(id: string, input: UpdateTaskInput, actor: 'hum
   if (input.approvedBy !== undefined) updateData.approvedBy = input.approvedBy;
   if (input.results !== undefined) updateData.results = input.results;
   if (input.commits !== undefined) updateData.commits = input.commits;
+  if (input.projectId !== undefined) updateData.projectId = input.projectId;
 
   updateData.lastActionAt = new Date();
 
@@ -256,19 +260,20 @@ export async function updateTask(id: string, input: UpdateTaskInput, actor: 'hum
     entityType: 'Task',
     entityId: id,
     actor,
-    before,
-    after: mapPrismaTaskToTask(task)
+    before: before as unknown as Record<string, unknown>,
+    after: mapPrismaTaskToTask(task as Parameters<typeof mapPrismaTaskToTask>[0]) as unknown as Record<string, unknown>
   });
 
   // Emit SSE event
-  emitTaskEvent('task:updated', mapPrismaTaskToTask(task));
+  const mapped = mapPrismaTaskToTask(task as Parameters<typeof mapPrismaTaskToTask>[0]);
+  emitTaskEvent('task:updated', mapped);
 
   // Trigger webhook if assigned to clawdbot
   if (task.assignee === 'clawdbot') {
-    await triggerWebhook('task.updated', task);
+    await triggerWebhook('task.updated', mapped);
   }
 
-  return mapPrismaTaskToTask(task);
+  return mapped;
 }
 
 export async function moveTask(id: string, status: TaskStatus, actor: 'human' | 'clawdbot' = 'human'): Promise<Task | null> {
@@ -308,7 +313,7 @@ export async function deleteTask(id: string, actor: 'human' | 'clawdbot' = 'huma
       entityType: 'Task',
       entityId: id,
       actor,
-      before
+      before: before as unknown as Record<string, unknown>
     });
 
     // Emit SSE event
@@ -361,7 +366,7 @@ export async function updateHeartbeat(taskId: string): Promise<Task | null> {
         orderBy: { completedAt: 'desc' }
       }
     }
-  }).then(task => mapPrismaTaskToTask(task));
+  }).then(task => mapPrismaTaskToTask(task as Parameters<typeof mapPrismaTaskToTask>[0]));
 }
 
 // ============================================
@@ -451,6 +456,7 @@ export function mapPrismaTaskToTask(task: {
   sessionKey: string | null;
   sessionLockedAt: Date | null;
   currentStateStartedAt: Date | null;
+  projectId: string | null;
 }): Task {
   return {
     id: task.id,
@@ -461,6 +467,7 @@ export function mapPrismaTaskToTask(task: {
     assignee: task.assignee || undefined,
     priority: task.priority as Priority,
     tags: task.tags,
+    projectId: task.projectId ?? undefined,
     planChecklist: task.planChecklist,
     currentStepIndex: task.currentStepIndex,
     progressLog: (task.progressLog || []).map(entry => ({
@@ -560,6 +567,7 @@ export async function getTasksByStatus(): Promise<Record<TaskStatus, Task[]>> {
     InProgress: [],
     Blocked: [],
     Review: [],
+    Failed: [],
     Done: []
   };
 

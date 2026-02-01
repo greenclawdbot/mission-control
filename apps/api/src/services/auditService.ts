@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../db/client';
 
 export interface AuditEventInput {
@@ -16,8 +17,8 @@ export async function emitAuditEvent(input: AuditEventInput): Promise<void> {
       entityType: input.entityType,
       entityId: input.entityId,
       actor: input.actor,
-      before: input.before || null,
-      after: input.after || null,
+      before: (input.before ?? undefined) as Prisma.InputJsonValue | undefined,
+      after: (input.after ?? undefined) as Prisma.InputJsonValue | undefined,
       timestamp: new Date()
     }
   });
@@ -33,10 +34,20 @@ export async function getTaskAuditEvents(taskId: string): Promise<{
   after: Record<string, unknown> | null;
   timestamp: Date;
 }[]> {
-  return prisma.auditEvent.findMany({
+  const rows = await prisma.auditEvent.findMany({
     where: { taskId },
     orderBy: { timestamp: 'desc' }
   });
+  return rows as {
+    id: string;
+    eventType: string;
+    entityType: string;
+    entityId: string;
+    actor: string;
+    before: Record<string, unknown> | null;
+    after: Record<string, unknown> | null;
+    timestamp: Date;
+  }[];
 }
 
 export async function getAllAuditEvents(filters?: {
@@ -60,9 +71,19 @@ export async function getAllAuditEvents(filters?: {
   if (filters?.actor) where.actor = filters.actor;
   if (filters?.eventType) where.eventType = filters.eventType;
 
-  return prisma.auditEvent.findMany({
+  const rows = await prisma.auditEvent.findMany({
     where,
     orderBy: { timestamp: 'desc' },
     take: filters?.limit || 100
   });
+  return rows as {
+    id: string;
+    eventType: string;
+    entityType: string;
+    entityId: string;
+    actor: string;
+    before: Record<string, unknown> | null;
+    after: Record<string, unknown> | null;
+    timestamp: Date;
+  }[];
 }

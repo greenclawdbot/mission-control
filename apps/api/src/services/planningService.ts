@@ -1,4 +1,4 @@
-import { Task } from '../../../packages/shared/src/types';
+import { Task } from '@shared/src/types';
 
 export const DEFAULT_PROMPTS = {
   coding: "You are a software development assistant. Create a detailed implementation plan for: {title}. Include specific steps, file structure, and technical considerations.",
