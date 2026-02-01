@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Task, TaskStatus, TASK_STATUSES, PRIORITIES, ExecutionState, TaskStateLog } from '../shared-types';
+import { Task, TaskStatus, TASK_STATUSES, PRIORITIES, ExecutionState, TaskStateLog, TaskConversationMessage } from '../shared-types';
 import { api } from '../api/client';
 import { marked } from 'marked';
 
@@ -21,18 +21,9 @@ interface BotRun {
   parentRunId?: string;
 }
 
-interface ContextMessage {
-  id: string;
-  content: string;
-  timestamp: string;
-  status?: 'Completed' | 'Failed' | TaskStatus;
-  attemptNumber?: number;
-  runResult?: string;
-}
-
 export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: TaskDrawerProps) {
   const [task, setTask] = useState(initialTask);
-  const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'results' | 'runs' | 'activity' | 'state'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'conversation' | 'results' | 'runs' | 'activity' | 'state'>('details');
   
   // Sync local state when initialTask changes (e.g., clicking different card)
   useEffect(() => {
@@ -53,9 +44,9 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
     needsApproval: task.needsApproval
   });
   
-  // Additional context state for Review items
+  // Conversation feed and additional context (Review)
+  const [conversationMessages, setConversationMessages] = useState<TaskConversationMessage[]>([]);
   const [additionalContext, setAdditionalContext] = useState('');
-  const [contextMessages, setContextMessages] = useState<ContextMessage[]>([]);
 
   // ESC close only
   useEffect(() => {
@@ -69,49 +60,18 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [taskRes, eventsRes, runsRes, stateLogsRes] = await Promise.all([
+        const [taskRes, eventsRes, runsRes, stateLogsRes, conversationRes] = await Promise.all([
           api.getTask(task.id),
           api.getTaskEvents(task.id),
           fetch(`/api/v1/tasks/${task.id}/runs`).then(r => r.json()).catch(() => ({ runs: [] })),
-          api.getTaskStateLogs(task.id)
+          api.getTaskStateLogs(task.id),
+          api.getTaskConversation(task.id)
         ]);
         setTask(taskRes.task);
         setAuditEvents(eventsRes.events || []);
         setBotRuns(((runsRes as { runs?: BotRun[] }).runs) || []);
         setStateLogs(stateLogsRes.logs || []);
-        
-        // Build context messages from task description and previous runs
-        const messages: ContextMessage[] = [];
-        
-        // Parse existing context from description
-        if (taskRes.task.description) {
-          const contextRegex = /---\s*\*\*Additional Context \((.+?)\):\*\*\s*([\s\S]*?)(?=---|$)/g;
-          let match;
-          while ((match = contextRegex.exec(taskRes.task.description)) !== null) {
-            messages.push({
-              id: `context-${match.index}`,
-              content: match[2].trim(),
-              timestamp: match[1]
-            });
-          }
-        }
-        
-        // Add previous run results to messages
-        const runs = ((runsRes as { runs?: BotRun[] }).runs) || [];
-        runs.forEach(run => {
-          if (run.status === 'completed' || run.status === 'failed') {
-            messages.push({
-              id: `run-${run.id}`,
-              content: `Run #${run.attemptNumber}: ${run.summary || 'No summary'}`,
-              timestamp: run.startedAt,
-              status: run.status === 'completed' ? 'Completed' : 'Failed',
-              attemptNumber: run.attemptNumber,
-              runResult: run.summary
-            });
-          }
-        });
-        
-        setContextMessages(messages.reverse());
+        setConversationMessages(conversationRes.messages);
       } catch (error) {
         console.error('Failed to fetch task data:', error);
       }
@@ -190,27 +150,17 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
   };
 
   const handleStatusChange = async (status: TaskStatus) => {
-    let descriptionUpdate = undefined;
-    
-    // When moving from Review with additional context, prepend it to description
-    if (task.status === 'Review' && additionalContext.trim()) {
-      const timestamp = new Date().toISOString();
-      const contextHeader = `\n\n---\n**Additional Context (${timestamp}):**\n${additionalContext.trim()}\n`;
-      descriptionUpdate = (task.description || '') + contextHeader;
-    }
-    
     optimisticUpdate({ status });
     try {
-      const response = await api.updateTask(task.id, { 
-        status,
-        ...(descriptionUpdate && { description: descriptionUpdate })
-      });
-      setTask(response.task);
-      onUpdate(response.task);
-      // Clear additional context after successful move
-      if (task.status === 'Review') {
+      if (task.status === 'Review' && additionalContext.trim()) {
+        const { message } = await api.appendTaskConversationMessage(task.id, additionalContext.trim());
+        setConversationMessages(prev => [...prev, message]);
         setAdditionalContext('');
       }
+      const response = await api.updateTask(task.id, { status });
+      setTask(response.task);
+      onUpdate(response.task);
+      if (task.status === 'Review') setAdditionalContext('');
     } catch (error) {
       console.error('Failed to update status:', error);
       const taskRes = await api.getTask(task.id);
@@ -220,30 +170,13 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
 
   const handleSubmitContext = async () => {
     if (!additionalContext.trim()) return;
-    
-    const timestamp = new Date().toISOString();
-    const newMessage: ContextMessage = {
-      id: `context-${Date.now()}`,
-      content: additionalContext.trim(),
-      timestamp
-    };
-    
-    // Add to local messages
-    setContextMessages(prev => [newMessage, ...prev]);
-    
-    // Also update the task description
-    const contextHeader = `\n\n---\n**Additional Context (${timestamp}):**\n${additionalContext.trim()}\n`;
-    const descriptionUpdate = (task.description || '') + contextHeader;
-    
+    const content = additionalContext.trim();
     try {
-      const response = await api.updateTask(task.id, { description: descriptionUpdate });
-      setTask(response.task);
-      onUpdate(response.task);
+      const { message } = await api.appendTaskConversationMessage(task.id, content);
+      setConversationMessages(prev => [...prev, message]);
       setAdditionalContext('');
     } catch (error) {
       console.error('Failed to save context:', error);
-      // Remove from local messages on failure
-      setContextMessages(prev => prev.filter(m => m.id !== newMessage.id));
     }
   };
 
@@ -459,7 +392,7 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
         padding: '0 20px',
         flexShrink: 0
       }}>
-        {(['details', 'plan', 'results', 'runs', 'activity', 'state'] as const).map(tab => (
+        {(['details', 'plan', 'conversation', 'results', 'runs', 'activity', 'state'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -622,179 +555,6 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
               )}
             </div>
 
-            {/* Additional Context - Only shown in Review */}
-            {task.status === 'Review' && (
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--accent-orange)', marginBottom: '8px' }}>
-                  CONTEXT FEED ⚠️
-                </label>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: 0, marginBottom: '16px' }}>
-                  Previous context messages and run results are shown below. Enter new context below to add to the feed.
-                </p>
-                
-                {/* Chat Feed - Previous Contexts and Results */}
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                  maxHeight: '300px',
-                  overflowY: 'auto',
-                  marginBottom: '16px',
-                  padding: '12px',
-                  background: 'var(--bg-secondary)',
-                  borderRadius: '8px'
-                }}>
-                  {contextMessages.length === 0 ? (
-                    <div style={{
-                      textAlign: 'center',
-                      padding: '24px',
-                      color: 'var(--text-secondary)',
-                      fontSize: '13px'
-                    }}>
-                      No previous context or run results. Add context below to start the conversation.
-                    </div>
-                  ) : (
-                    contextMessages.map((message) => (
-                      <div key={message.id} style={{
-                        background: message.runResult ? 'rgba(88, 166, 255, 0.1)' : 'var(--bg-tertiary)',
-                        padding: '12px',
-                        borderRadius: '8px',
-                        borderLeft: message.runResult 
-                          ? '3px solid var(--accent-blue)'
-                          : '3px solid var(--accent-orange)'
-                      }}>
-                        {message.runResult ? (
-                          <>
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              marginBottom: '8px'
-                            }}>
-                              <span style={{
-                                background: 'var(--accent-blue)',
-                                color: 'white',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontSize: '10px',
-                                fontWeight: 600
-                              }}>
-                                🤖 RUN #{message.attemptNumber}
-                              </span>
-                              <span style={{
-                                background: message.status === 'Completed' 
-                                  ? 'var(--accent-green)' 
-                                  : 'var(--accent-red)',
-                                color: 'white',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontSize: '10px',
-                                fontWeight: 600
-                              }}>
-                                {message.status?.toUpperCase()}
-                              </span>
-                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                                {formatDate(message.timestamp)}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '13px' }}>
-                              {message.runResult}
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              marginBottom: '8px'
-                            }}>
-                              <span style={{
-                                background: 'var(--accent-orange)',
-                                color: 'white',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontSize: '10px',
-                                fontWeight: 600
-                              }}>
-                                👤 CONTEXT
-                              </span>
-                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                                {formatDate(message.timestamp)}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '13px' }}>
-                              {message.content}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* New Context Input */}
-                <div style={{ marginBottom: '12px' }}>
-                  <textarea
-                    className="input textarea"
-                    value={additionalContext}
-                    onChange={e => setAdditionalContext(e.target.value)}
-                    placeholder="Enter new context, feedback, or instructions..."
-                    rows={3}
-                    style={{
-                      width: '100%',
-                      borderColor: 'var(--accent-orange)',
-                      background: 'rgba(210, 153, 34, 0.05)'
-                    }}
-                  />
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    marginTop: '8px'
-                  }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      {additionalContext.length} characters
-                    </span>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      {/* Backlog/Ready buttons moved here - below the input */}
-                      <button 
-                        className="btn btn-sm"
-                        onClick={() => handleStatusChange('Backlog')}
-                        title="Move back to Backlog for revision"
-                        style={{
-                          background: 'var(--bg-tertiary)',
-                          borderColor: 'var(--border-color)'
-                        }}
-                      >
-                        📥 Backlog
-                      </button>
-                      <button 
-                        className="btn btn-sm"
-                        onClick={() => handleStatusChange('Ready')}
-                        title="Move back to Ready for bot to reprocess"
-                        style={{
-                          background: 'var(--accent-green)',
-                          color: 'white',
-                          borderColor: 'var(--accent-green)'
-                        }}
-                      >
-                        📋 Ready
-                      </button>
-                      <button 
-                        className="btn btn-primary btn-sm"
-                        onClick={handleSubmitContext}
-                        disabled={!additionalContext.trim()}
-                        title="Submit context to add to feed (without changing status)"
-                      >
-                        ➕ Add Context
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Tags */}
             <div>
               <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
@@ -942,34 +702,167 @@ export function TaskDrawer({ task: initialTask, onClose, onUpdate, onDelete }: T
           </div>
         )}
 
+        {activeTab === 'conversation' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              Chronological conversation (user context and bot results). Add context below to continue the thread.
+            </div>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              paddingBottom: '200px'
+            }}>
+              {conversationMessages.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '24px',
+                  color: 'var(--text-secondary)',
+                  fontSize: '13px'
+                }}>
+                  No messages yet. Add context below or run the task to start the conversation.
+                </div>
+              ) : (
+                conversationMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    style={{
+                      background: msg.role === 'assistant' ? 'rgba(88, 166, 255, 0.08)' : 'var(--bg-tertiary)',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      borderLeft: msg.role === 'assistant' ? '3px solid var(--accent-blue)' : '3px solid var(--accent-orange)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{
+                        background: msg.role === 'assistant' ? 'var(--accent-blue)' : 'var(--accent-orange)',
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontSize: '10px',
+                        fontWeight: 600
+                      }}>
+                        {msg.role === 'assistant' ? '🤖 Clawdbot' : '👤 You'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        {formatDate(msg.createdAt)}
+                      </span>
+                    </div>
+                    <div className={msg.role === 'assistant' ? 'markdown-content' : ''} style={{ fontSize: '13px' }}>
+                      {msg.role === 'assistant' ? (
+                        <div dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }} />
+                      ) : (
+                        msg.content
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div style={{
+              position: 'sticky',
+              bottom: 0,
+              background: 'var(--bg-primary)',
+              padding: '12px 0',
+              borderTop: '1px solid var(--border-color)'
+            }}>
+              <textarea
+                className="input textarea"
+                value={additionalContext}
+                onChange={e => setAdditionalContext(e.target.value)}
+                placeholder="Enter new context, feedback, or instructions..."
+                rows={3}
+                style={{
+                  width: '100%',
+                  borderColor: 'var(--accent-orange)',
+                  background: 'rgba(210, 153, 34, 0.05)'
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  {additionalContext.length} characters
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {task.status === 'Review' && (
+                    <>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => handleStatusChange('Backlog')}
+                        title="Move back to Backlog"
+                        style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--border-color)' }}
+                      >
+                        📥 Backlog
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => handleStatusChange('Ready')}
+                        title="Move to Ready for bot to reprocess"
+                        style={{ background: 'var(--accent-green)', color: 'white', borderColor: 'var(--accent-green)' }}
+                      >
+                        📋 Ready
+                      </button>
+                    </>
+                  )}
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={handleSubmitContext}
+                    disabled={!additionalContext.trim()}
+                    title="Add context to feed (without changing status)"
+                  >
+                    ➕ Add Context
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'results' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            {/* Work Results */}
+            {/* Work Results (assistant messages from conversation) */}
             <div>
               <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                 WORK RESULTS
               </label>
-              {task.results ? (
-                <div 
-                  className="markdown-content"
-                  style={{
-                    background: 'var(--bg-secondary)',
-                    padding: '16px',
-                    borderRadius: '8px'
-                  }}
-                  dangerouslySetInnerHTML={{ __html: marked.parse(task.results) }}
-                />
-              ) : (
-                <div style={{
-                  background: 'var(--bg-secondary)',
-                  padding: '24px',
-                  borderRadius: '8px',
-                  textAlign: 'center',
-                  color: 'var(--text-secondary)'
-                }}>
-                  No results recorded yet. Results are added when work is completed.
-                </div>
-              )}
+              {(() => {
+                const assistantMessages = conversationMessages.filter(m => m.role === 'assistant');
+                if (assistantMessages.length === 0) {
+                  return (
+                    <div style={{
+                      background: 'var(--bg-secondary)',
+                      padding: '24px',
+                      borderRadius: '8px',
+                      textAlign: 'center',
+                      color: 'var(--text-secondary)'
+                    }}>
+                      No results recorded yet. Results are added when work is completed.
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {assistantMessages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className="markdown-content"
+                        style={{
+                          background: 'var(--bg-secondary)',
+                          padding: '16px',
+                          borderRadius: '8px'
+                        }}
+                      >
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                          {formatDate(msg.createdAt)}
+                        </div>
+                        <div dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }} />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Git Commits */}

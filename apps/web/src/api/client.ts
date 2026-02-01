@@ -1,4 +1,4 @@
-import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, TaskStateLog, Project, EffectiveStageSettings, StageSettingRow } from '../shared-types';
+import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, TaskStateLog, TaskConversationMessage, Project, EffectiveStageSettings, StageSettingRow } from '../shared-types';
 
 const base = (import.meta.env?.VITE_API_URL ?? '').toString().trim().replace(/\/$/, '');
 const API_BASE = base ? `${base}/api/v1` : '/api/v1';
@@ -89,6 +89,17 @@ export const api = {
 
   async getTaskStateLogs(id: string): Promise<{ logs: TaskStateLog[] }> {
     return fetchJson(`${API_BASE}/tasks/${id}/state-logs`);
+  },
+
+  async getTaskConversation(id: string): Promise<{ messages: TaskConversationMessage[] }> {
+    return fetchJson(`${API_BASE}/tasks/${id}/conversation`);
+  },
+
+  async appendTaskConversationMessage(id: string, content: string): Promise<{ message: TaskConversationMessage }> {
+    return fetchJson(`${API_BASE}/tasks/${id}/conversation`, {
+      method: 'POST',
+      body: JSON.stringify({ content })
+    });
   },
 
   async getBoardSummary(): Promise<{ summary: { tasksThisWeek: number; inProgress: number; total: number; completionPercent: number; runningBots: number; idleTasks: number; blockedTasks: number } }> {
