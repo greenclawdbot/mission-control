@@ -46,6 +46,7 @@ const updateTaskSchema = z.object({
   approvedAt: z.string().optional(),
   approvedBy: z.string().optional(),
   results: z.string().optional(),
+  botRunId: z.string().uuid().optional(),
   projectId: z.string().uuid().nullable().optional(),
   commits: z.array(z.object({
     sha: z.string(),
@@ -161,6 +162,38 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     return { task };
+  });
+
+  // GET /api/tasks/:id/conversation - Get conversation messages for a task
+  fastify.get<{
+    Params: z.infer<typeof taskParamsSchema>;
+  }>('/tasks/:id/conversation', async (request: FastifyRequest<{ Params: z.infer<typeof taskParamsSchema> }>, reply: FastifyReply) => {
+    const task = await taskService.getTaskById(request.params.id);
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+    const messages = await taskService.getConversationForTask(request.params.id);
+    return { messages };
+  });
+
+  // POST /api/tasks/:id/conversation - Append a user message to the conversation
+  const postConversationSchema = z.object({
+    content: z.string().min(1)
+  });
+  fastify.post<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof postConversationSchema>;
+  }>('/tasks/:id/conversation', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Body: z.infer<typeof postConversationSchema>;
+  }>, reply: FastifyReply) => {
+    const task = await taskService.getTaskById(request.params.id);
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+    const { content } = postConversationSchema.parse(request.body);
+    const message = await taskService.appendUserMessage(request.params.id, content);
+    return reply.status(201).send({ message });
   });
 
   // POST /api/tasks - Create task
@@ -356,6 +389,7 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.delete('/tasks/clear-demo', async (_request, reply: FastifyReply) => {
     try {
       // Delete in correct order due to foreign key constraints
+      await prisma.taskConversationMessage.deleteMany({});
       await prisma.taskProgressLogEntry.deleteMany({});
       await prisma.taskStateLog.deleteMany({});
       await prisma.auditEvent.deleteMany({});
@@ -584,10 +618,18 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
         readyPrompt = contextParagraph.trim() + (readyInstructions ? '\n\n' + readyInstructions : '');
       }
 
+      const messages = await taskService.getConversationForTask(updatedTask.id);
+      const conversationBlock =
+        messages.length === 0
+          ? `Task: ${updatedTask.title}\n\nConversation so far:\n(no messages yet)`
+          : `Task: ${updatedTask.title}\n\nConversation so far:\n${messages.map((m) => `[${m.role}] (${m.createdAt}):\n${m.content}`).join('\n\n')}`;
+
       return {
         task: mappedTask,
         action: 'claimed',
         readyPrompt,
+        conversationForPrompt: conversationBlock,
+        conversation: messages,
         workFolder,
         ...(projectName != null && { projectName }),
         ...(model && { model })

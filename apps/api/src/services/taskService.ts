@@ -1,5 +1,5 @@
 import prisma from '../db/client';
-import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, ProgressLogEntry, Priority } from '@shared/src/types';
+import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, ProgressLogEntry, Priority, TaskConversationMessage } from '@shared/src/types';
 import { emitAuditEvent } from './auditService';
 import { triggerWebhook } from './webhookService';
 import { emitTaskEvent } from '../sseServer';
@@ -164,6 +164,9 @@ export async function createTask(input: CreateTaskInput, actor: 'human' | 'clawd
   // Create initial state log entry
   await createStateLogEntry(task.id, status);
 
+  // Seed initial user message for conversation feed
+  await appendUserMessage(task.id, input.description ?? '');
+
   // Emit audit event
   await emitAuditEvent({
     eventType: 'task.created',
@@ -255,6 +258,10 @@ export async function updateTask(id: string, input: UpdateTaskInput, actor: 'hum
     }
   });
 
+  if (input.results !== undefined) {
+    await appendAssistantMessage(id, input.results, input.botRunId);
+  }
+
   // Emit audit event
   await emitAuditEvent({
     eventType: 'task.updated',
@@ -292,6 +299,7 @@ export async function deleteTask(id: string, actor: 'human' | 'clawdbot' = 'huma
 
   try {
     // Delete related records first (due to foreign key constraints)
+    await prisma.taskConversationMessage.deleteMany({ where: { taskId: id } });
     await prisma.taskProgressLogEntry.deleteMany({ where: { taskId: id } });
     await prisma.taskStateLog.deleteMany({ where: { taskId: id } });
     await prisma.auditEvent.deleteMany({ where: { taskId: id } });
@@ -420,6 +428,69 @@ export async function getBotRunsForTask(taskId: string): Promise<unknown[]> {
     where: { taskId },
     orderBy: { startedAt: 'desc' }
   });
+}
+
+// ============================================
+// Task Conversation (ongoing feed per task)
+// ============================================
+
+function mapPrismaMessageToMessage(msg: {
+  id: string;
+  taskId: string;
+  role: string;
+  content: string;
+  createdAt: Date;
+  botRunId: string | null;
+}): TaskConversationMessage {
+  return {
+    id: msg.id,
+    taskId: msg.taskId,
+    role: msg.role as 'user' | 'assistant',
+    content: msg.content,
+    createdAt: msg.createdAt.toISOString(),
+    botRunId: msg.botRunId ?? undefined
+  };
+}
+
+export async function getConversationForTask(taskId: string): Promise<TaskConversationMessage[]> {
+  const messages = await prisma.taskConversationMessage.findMany({
+    where: { taskId },
+    orderBy: { createdAt: 'asc' }
+  });
+  return messages.map((m) => mapPrismaMessageToMessage(m));
+}
+
+export async function appendUserMessage(taskId: string, content: string): Promise<TaskConversationMessage> {
+  const msg = await prisma.taskConversationMessage.create({
+    data: {
+      taskId,
+      role: 'user',
+      content,
+      createdAt: new Date()
+    }
+  });
+  return mapPrismaMessageToMessage(msg);
+}
+
+export async function appendAssistantMessage(
+  taskId: string,
+  content: string,
+  botRunId?: string
+): Promise<TaskConversationMessage> {
+  const msg = await prisma.taskConversationMessage.create({
+    data: {
+      taskId,
+      role: 'assistant',
+      content,
+      createdAt: new Date(),
+      ...(botRunId && { botRunId })
+    }
+  });
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { results: content }
+  });
+  return mapPrismaMessageToMessage(msg);
 }
 
 // ============================================
