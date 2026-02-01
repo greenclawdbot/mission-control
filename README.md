@@ -31,7 +31,7 @@ In a **terminal**, from the repo root:
 npm install
 cp .env.example .env
 # Edit .env with your DATABASE_URL if needed
-npm run db:migrate
+npm run db:migrate   # applies migrations using root .env (same DB as the API)
 npm run db:seed
 npm run dev
 ```
