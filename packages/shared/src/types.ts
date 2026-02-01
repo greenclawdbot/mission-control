@@ -162,6 +162,18 @@ export interface TaskStateLog {
 }
 
 // ============================================
+// Task Conversation Message (ongoing feed per task)
+// ============================================
+export interface TaskConversationMessage {
+  id: string;
+  taskId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+  botRunId?: string | null;
+}
+
+// ============================================
 // Audit Event Interface
 // ============================================
 export interface AuditEvent {
@@ -218,6 +230,7 @@ export interface UpdateTaskInput {
   timeSpent?: number;
   dueDate?: string;
   results?: string;
+  botRunId?: string;
   needsApproval?: boolean;
   approvedAt?: string;
   approvedBy?: string;

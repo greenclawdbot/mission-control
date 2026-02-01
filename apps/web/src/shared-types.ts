@@ -139,6 +139,18 @@ export interface TaskStateLog {
 }
 
 // ============================================
+// Task Conversation Message (ongoing feed per task)
+// ============================================
+export interface TaskConversationMessage {
+  id: string;
+  taskId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+  botRunId?: string | null;
+}
+
+// ============================================
 // Progress Log Entry
 // ============================================
 export interface ProgressLogEntry {
@@ -231,6 +243,7 @@ export interface UpdateTaskInput {
   approvedAt?: string;
   approvedBy?: string;
   results?: string;
+  botRunId?: string;
   projectId?: string | null;
   commits?: Array<{
     sha: string;
