@@ -1,4 +1,4 @@
-import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, TaskStateLog, TaskConversationMessage, Project, EffectiveStageSettings, StageSettingRow } from '../shared-types';
+import { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, ExecutionState, TaskStateLog, TaskConversationMessage, TaskPlanningMessage, Project, EffectiveStageSettings, StageSettingRow } from '../shared-types';
 
 const base = (import.meta.env?.VITE_API_URL ?? '').toString().trim().replace(/\/$/, '');
 const API_BASE = base ? `${base}/api/v1` : '/api/v1';
@@ -97,6 +97,17 @@ export const api = {
 
   async appendTaskConversationMessage(id: string, content: string): Promise<{ message: TaskConversationMessage }> {
     return fetchJson(`${API_BASE}/tasks/${id}/conversation`, {
+      method: 'POST',
+      body: JSON.stringify({ content })
+    });
+  },
+
+  async getTaskPlanningConversation(id: string): Promise<{ messages: TaskPlanningMessage[] }> {
+    return fetchJson(`${API_BASE}/tasks/${id}/planning-conversation`);
+  },
+
+  async appendTaskPlanningConversationMessage(id: string, content: string): Promise<{ message: TaskPlanningMessage }> {
+    return fetchJson(`${API_BASE}/tasks/${id}/planning-conversation`, {
       method: 'POST',
       body: JSON.stringify({ content })
     });

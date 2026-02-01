@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Task, TaskStatus, TASK_STATUSES, PRIORITIES, ExecutionState, TaskStateLog, TaskConversationMessage } from '../shared-types';
+import { Task, TaskStatus, TASK_STATUSES, PRIORITIES, ExecutionState, TaskStateLog, TaskConversationMessage, TaskPlanningMessage } from '../shared-types';
 import { api } from '../api/client';
 import { marked } from 'marked';
 
@@ -27,7 +27,7 @@ interface BotRun {
 
 export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onDelete, projectName, projectColor }: TaskInspectorContentProps) {
   const [task, setTask] = useState(initialTask);
-  const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'conversation' | 'results' | 'runs' | 'activity' | 'state'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'conversation' | 'planning' | 'results' | 'runs' | 'activity' | 'state'>('details');
   
   // Sync local state when initialTask changes (e.g., clicking different card)
   useEffect(() => {
@@ -51,6 +51,9 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
   // Conversation feed and additional context (Review)
   const [conversationMessages, setConversationMessages] = useState<TaskConversationMessage[]>([]);
   const [additionalContext, setAdditionalContext] = useState('');
+  // Planning conversation (separate thread)
+  const [planningMessages, setPlanningMessages] = useState<TaskPlanningMessage[]>([]);
+  const [planningContext, setPlanningContext] = useState('');
 
   // ESC close only
   useEffect(() => {
@@ -64,18 +67,20 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [taskRes, eventsRes, runsRes, stateLogsRes, conversationRes] = await Promise.all([
+        const [taskRes, eventsRes, runsRes, stateLogsRes, conversationRes, planningRes] = await Promise.all([
           api.getTask(task.id),
           api.getTaskEvents(task.id),
           fetch(`/api/v1/tasks/${task.id}/runs`).then(r => r.json()).catch(() => ({ runs: [] })),
           api.getTaskStateLogs(task.id),
-          api.getTaskConversation(task.id)
+          api.getTaskConversation(task.id),
+          api.getTaskPlanningConversation(task.id)
         ]);
         setTask(taskRes.task);
         setAuditEvents(eventsRes.events || []);
         setBotRuns(((runsRes as { runs?: BotRun[] }).runs) || []);
         setStateLogs(stateLogsRes.logs || []);
         setConversationMessages(conversationRes.messages);
+        setPlanningMessages(planningRes.messages);
       } catch (error) {
         console.error('Failed to fetch task data:', error);
       }
@@ -181,6 +186,23 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
       setAdditionalContext('');
     } catch (error) {
       console.error('Failed to save context:', error);
+    }
+  };
+
+  const handleSubmitPlanningContext = async () => {
+    if (!planningContext.trim()) return;
+    const content = planningContext.trim();
+    try {
+      const { message } = await api.appendTaskPlanningConversationMessage(task.id, content);
+      setPlanningMessages(prev => [...prev, message]);
+      setPlanningContext('');
+      if (task.status !== 'Planning') {
+        const { task: updatedTask } = await api.getTask(task.id);
+        setTask(updatedTask);
+        onUpdate(updatedTask);
+      }
+    } catch (error) {
+      console.error('Failed to save planning message:', error);
     }
   };
 
@@ -415,7 +437,7 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
         padding: '0 20px',
         flexShrink: 0
       }}>
-        {(['details', 'plan', 'conversation', 'results', 'runs', 'activity', 'state'] as const).map(tab => (
+        {(['details', 'plan', 'conversation', 'planning', 'results', 'runs', 'activity', 'state'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -641,6 +663,24 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
 
         {activeTab === 'plan' && (
           <div>
+            {task.planDocument && task.planDocument.trim() && (
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                  CURRENT PLAN
+                </label>
+                <div
+                  className="markdown-content"
+                  style={{
+                    background: 'var(--bg-secondary)',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    borderLeft: '3px solid var(--accent-blue)'
+                  }}
+                  dangerouslySetInnerHTML={{ __html: marked.parse(task.planDocument) }}
+                />
+              </div>
+            )}
             {/* Progress Overview */}
             <div style={{
               background: 'var(--bg-secondary)',
@@ -838,6 +878,119 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
                     ➕ Add Context
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'planning' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              Planning conversation: add feedback for the planner. The plan will appear here as the assistant message. If the task is not in Planning, submitting will queue it for the planner.
+            </div>
+            <div style={{
+              background: 'var(--bg-secondary)',
+              padding: '16px',
+              borderRadius: '8px',
+              borderLeft: '3px solid var(--border-color)'
+            }}>
+              <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Task (initial description)
+              </label>
+              <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>{task.title}</div>
+              {task.description && task.description.trim() ? (
+                <div
+                  className="markdown-content"
+                  style={{ fontSize: '13px', color: 'var(--text-primary)' }}
+                  dangerouslySetInnerHTML={{ __html: marked.parse(task.description) }}
+                />
+              ) : (
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>No description</div>
+              )}
+            </div>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              paddingBottom: '200px'
+            }}>
+              {planningMessages.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '24px',
+                  color: 'var(--text-secondary)',
+                  fontSize: '13px'
+                }}>
+                  No planning messages yet. Add feedback below to queue this task for the planner.
+                </div>
+              ) : (
+                planningMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    style={{
+                      background: msg.role === 'assistant' ? 'rgba(88, 166, 255, 0.08)' : 'var(--bg-tertiary)',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      borderLeft: msg.role === 'assistant' ? '3px solid var(--accent-blue)' : '3px solid var(--accent-orange)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{
+                        background: msg.role === 'assistant' ? 'var(--accent-blue)' : 'var(--accent-orange)',
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontSize: '10px',
+                        fontWeight: 600
+                      }}>
+                        {msg.role === 'assistant' ? '🤖 Planner' : '👤 You'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        {formatDate(msg.createdAt)}
+                      </span>
+                    </div>
+                    <div className={msg.role === 'assistant' ? 'markdown-content' : ''} style={{ fontSize: '13px' }}>
+                      {msg.role === 'assistant' ? (
+                        <div dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }} />
+                      ) : (
+                        msg.content
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div style={{
+              position: 'sticky',
+              bottom: 0,
+              background: 'var(--bg-primary)',
+              padding: '12px 0',
+              borderTop: '1px solid var(--border-color)'
+            }}>
+              <textarea
+                className="input textarea"
+                value={planningContext}
+                onChange={e => setPlanningContext(e.target.value)}
+                placeholder="Enter planning feedback or instructions..."
+                rows={3}
+                style={{
+                  width: '100%',
+                  borderColor: 'var(--accent-orange)',
+                  background: 'rgba(210, 153, 34, 0.05)'
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={handleSubmitPlanningContext}
+                  disabled={!planningContext.trim()}
+                  title="Add to planning conversation (queues task for planner if not in Planning)"
+                >
+                  ➕ Add to planning
+                </button>
               </div>
             </div>
           </div>
