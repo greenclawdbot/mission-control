@@ -85,6 +85,7 @@ model Task {
   auditEvents  AuditEvent[]
   progressLog  TaskProgressLogEntry[]
   botRuns      BotRun[]
+  conversationMessages TaskConversationMessage[]
   stateLogs    TaskStateLog[]
   dependencies TaskDependency[] @relation("DependentTask")
   dependents   TaskDependency[] @relation("DependencyTask")
@@ -159,10 +160,31 @@ model BotRun {
   // Retry tracking
   attemptNumber Int    @default(1)
   parentRunId  String? // For retries
+
+  conversationMessages TaskConversationMessage[]
   
   @@index([taskId])
   @@index([status])
   @@index([startedAt])
+}
+
+// ============================================
+// TASK CONVERSATION (ongoing feed per task)
+// ============================================
+
+model TaskConversationMessage {
+  id        String   @id @default(uuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  role      String   // "user" | "assistant"
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  botRunId  String?
+  botRun    BotRun?  @relation(fields: [botRunId], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+  @@index([createdAt])
+  @@index([botRunId])
 }
 
 // ============================================
