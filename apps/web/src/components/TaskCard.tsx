@@ -5,6 +5,7 @@ import { Task } from '../shared-types';
 interface TaskCardProps {
   task: Task;
   onClick: () => void;
+  onOpenInTab?: () => void;
   isSelected?: boolean;
   isAnimating?: boolean;
   isSystemUpdated?: boolean;
@@ -69,7 +70,7 @@ function StateTimerBadge({ task }: { task: Task }) {
   );
 }
 
-export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdated, projectName, projectColor }: TaskCardProps) {
+export function TaskCard({ task, onClick, onOpenInTab, isSelected, isAnimating, isSystemUpdated, projectName, projectColor }: TaskCardProps) {
   const [clickStart, setClickStart] = useState<{ x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -143,6 +144,33 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
     onClick();
   };
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (onOpenInTab) {
+      e.preventDefault();
+      e.stopPropagation();
+      onOpenInTab();
+    }
+  };
+
+  const headerStyle: React.CSSProperties = {
+    margin: '-14px -14px 0 -14px',
+    padding: '6px 14px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: projectColor ? 'rgba(255,255,255,0.95)' : 'var(--text-primary)',
+    background: projectColor ?? 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-color)',
+    borderRadius: '8px 8px 0 0',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    minHeight: '32px'
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -151,26 +179,46 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onClick={handleCardClick}
+      onDoubleClick={handleDoubleClick}
       data-task-id={task.id}
     >
-      {projectName && (
-        <div
-          className="task-card-project-header"
-          style={{
-            margin: '-14px -14px 0 -14px',
-            padding: '6px 14px',
-            fontSize: '12px',
-            fontWeight: 600,
-            color: projectColor ? 'rgba(255,255,255,0.95)' : 'var(--text-primary)',
-            background: projectColor ?? 'var(--bg-secondary)',
-            borderBottom: '1px solid var(--border-color)',
-            borderRadius: '8px 8px 0 0',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          {projectName}
+      {(projectName || onOpenInTab) && (
+        <div className="task-card-project-header" style={headerStyle}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+            {projectName ?? ''}
+          </span>
+          {onOpenInTab && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenInTab();
+              }}
+              aria-label="Open in tab"
+              title="Open in tab"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '28px',
+                height: '28px',
+                padding: 0,
+                border: 'none',
+                background: 'rgba(255,255,255,0.15)',
+                color: 'inherit',
+                cursor: 'pointer',
+                borderRadius: '6px',
+                flexShrink: 0
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+            </button>
+          )}
         </div>
       )}
       {/* Debug indicator for selected task */}

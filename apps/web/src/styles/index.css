@@ -758,6 +758,47 @@ body {
   overflow: hidden;
 }
 
+/* Document-style tab bar (above Kanban when tabs are open) */
+.task-tab-bar {
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+.task-tab-bar .task-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.task-tab-bar .task-tab-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Full-width task inspector (document tab content) */
+.task-inspector-fullwidth {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.task-inspector-fullwidth .task-inspector-content {
+  width: 100%;
+  max-width: none;
+}
+
 /* Mobile fallback: inspector becomes overlay on small screens */
 @media (max-width: 900px) {
   .content-area {

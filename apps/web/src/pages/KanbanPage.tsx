@@ -5,6 +5,8 @@ import { Task, TaskStatus, TASK_STATUSES, getProjectColor } from '../shared-type
 const PROJECT_DROP_PREFIX = 'project-';
 import { TaskCard } from '../components/TaskCard';
 import { TaskDrawer } from '../components/TaskDrawer';
+import { TaskInspectorContent } from '../components/TaskInspectorContent';
+import { TaskTabBar } from '../components/TaskTabBar';
 import { SummaryBar } from '../components/SummaryBar';
 import { NewTaskModal } from '../components/NewTaskModal';
 import { api } from '../api/client';
@@ -17,6 +19,8 @@ export function KanbanPage() {
   const { activeProjectId, setActiveProjectId, projects } = useActiveProject();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [openTaskIds, setOpenTaskIds] = useState<string[]>([]);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(() => {
@@ -69,6 +73,17 @@ export function KanbanPage() {
     fetchTaskCounts();
   }, [fetchTaskCounts]);
 
+  // Remove open tab IDs that no longer exist in tasks (e.g. after refetch)
+  useEffect(() => {
+    const taskIds = new Set(tasks.map(t => t.id));
+    const nextOpen = openTaskIds.filter(id => taskIds.has(id));
+    if (nextOpen.length >= openTaskIds.length) return;
+    setOpenTaskIds(nextOpen);
+    if (!activeTaskId || !taskIds.has(activeTaskId)) {
+      setActiveTaskId(nextOpen[0] ?? null);
+    }
+  }, [tasks, openTaskIds, activeTaskId]);
+
   const handleSSEEvent = useCallback((event: { type: string; data: Task }) => {
     if (isDragging) return;
     switch (event.type) {
@@ -97,12 +112,24 @@ export function KanbanPage() {
           }), 500);
         }
         break;
-      case 'task:deleted':
+      case 'task:deleted': {
         setTasks(prev => prev.filter(t => t.id !== event.data.id));
+        const removedId = event.data.id;
+        setOpenTaskIds(prev => {
+          const next = prev.filter(id => id !== removedId);
+          if (next.length === prev.length) return prev;
+          if (activeTaskId === removedId) {
+            const idx = prev.indexOf(removedId);
+            const newActive = next.length === 0 ? null : next[Math.max(0, Math.min(idx, next.length - 1))];
+            setActiveTaskId(newActive);
+          }
+          return next;
+        });
         break;
+      }
     }
     fetchTaskCounts();
-  }, [isDragging, fetchTaskCounts]);
+  }, [isDragging, fetchTaskCounts, activeTaskId]);
 
   const { nextCheck } = useSSE(handleSSEEvent);
 
@@ -161,8 +188,34 @@ export function KanbanPage() {
   const handleTaskDelete = async (taskId: string) => {
     setTasks(prev => prev.filter(t => t.id !== taskId));
     setSelectedTask(null);
+    setOpenTaskIds(prev => {
+      const next = prev.filter(id => id !== taskId);
+      if (activeTaskId === taskId) {
+        const idx = prev.indexOf(taskId);
+        const newActive = next.length === 0 ? null : next[Math.max(0, Math.min(idx, next.length - 1))];
+        setActiveTaskId(newActive);
+      }
+      return next;
+    });
     fetchTaskCounts();
   };
+
+  const handleOpenInTab = useCallback((task: Task) => {
+    setOpenTaskIds(prev => (prev.includes(task.id) ? prev : [...prev, task.id]));
+    setActiveTaskId(task.id);
+  }, []);
+
+  const handleCloseTab = useCallback((taskId: string) => {
+    setOpenTaskIds(prev => {
+      const next = prev.filter(id => id !== taskId);
+      if (activeTaskId === taskId) {
+        const idx = prev.indexOf(taskId);
+        const newActive = next.length === 0 ? null : next[Math.max(0, Math.min(idx, next.length - 1))];
+        setActiveTaskId(newActive);
+      }
+      return next;
+    });
+  }, [activeTaskId]);
 
   const toggleColumnCollapse = useCallback((status: TaskStatus) => {
     setCollapsedColumns(prev => ({ ...prev, [status]: !prev[status] }));
@@ -203,6 +256,36 @@ export function KanbanPage() {
             + New Task
           </button>
         </div>
+        {openTaskIds.length > 0 && (
+          <TaskTabBar
+            openTaskIds={openTaskIds}
+            activeTaskId={activeTaskId}
+            tasks={tasks}
+            onSelectTab={setActiveTaskId}
+            onCloseTab={handleCloseTab}
+          />
+        )}
+        {openTaskIds.length > 0 && activeTaskId ? (
+          <div className="task-inspector-fullwidth" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            {(() => {
+              const task = tasks.find(t => t.id === activeTaskId);
+              if (!task) return null;
+              const proj = task.projectId ? projects.find(p => p.id === task.projectId) : undefined;
+              const projectName = proj?.name ?? 'No project';
+              const projectColor = proj ? getProjectColor(proj, projects.indexOf(proj)) : undefined;
+              return (
+                <TaskInspectorContent
+                  task={task}
+                  onClose={() => handleCloseTab(activeTaskId)}
+                  onUpdate={handleTaskUpdate}
+                  onDelete={handleTaskDelete}
+                  projectName={projectName}
+                  projectColor={projectColor}
+                />
+              );
+            })()}
+          </div>
+        ) : (
         <div className="content-area" style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
           {sidebarOpen && (
             <aside
@@ -288,6 +371,7 @@ export function KanbanPage() {
                   tasks={column.tasks}
                   projects={projects}
                   onTaskClick={setSelectedTask}
+                  onOpenInTab={handleOpenInTab}
                   selectedTask={selectedTask}
                   animatingTasks={animatingTasks}
                   systemUpdatedTasks={systemUpdatedTasks}
@@ -298,15 +382,23 @@ export function KanbanPage() {
             </div>
           </main>
         </div>
-        {selectedTask && (
-          <TaskDrawer
-            task={selectedTask}
-            onClose={() => setSelectedTask(null)}
-            onUpdate={handleTaskUpdate}
-            onDelete={handleTaskDelete}
-          />
-        )}
+        {selectedTask && (() => {
+          const proj = selectedTask.projectId ? projects.find(p => p.id === selectedTask.projectId) : undefined;
+          const projectName = proj?.name ?? 'No project';
+          const projectColor = proj ? getProjectColor(proj, projects.indexOf(proj)) : undefined;
+          return (
+            <TaskDrawer
+              task={selectedTask}
+              onClose={() => setSelectedTask(null)}
+              onUpdate={handleTaskUpdate}
+              onDelete={handleTaskDelete}
+              projectName={projectName}
+              projectColor={projectColor}
+            />
+          );
+        })()}
         </div>
+        )}
       </div>
       {showNewTask && (
         <NewTaskModal
@@ -444,6 +536,7 @@ function Column({
   tasks,
   projects,
   onTaskClick,
+  onOpenInTab,
   selectedTask,
   animatingTasks,
   systemUpdatedTasks,
@@ -454,6 +547,7 @@ function Column({
   tasks: Task[];
   projects: { id: string; name: string; color?: string | null }[];
   onTaskClick: (task: Task) => void;
+  onOpenInTab: (task: Task) => void;
   selectedTask: Task | null;
   animatingTasks: Set<string>;
   systemUpdatedTasks: Set<string>;
@@ -565,6 +659,7 @@ function Column({
                   key={task.id}
                   task={task}
                   onClick={() => onTaskClick(task)}
+                  onOpenInTab={() => onOpenInTab(task)}
                   isSelected={selectedTask?.id === task.id}
                   isAnimating={animatingTasks.has(task.id)}
                   isSystemUpdated={systemUpdatedTasks.has(task.id)}
