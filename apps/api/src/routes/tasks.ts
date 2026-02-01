@@ -106,6 +106,7 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
         project: true
       }
     });
+    const defaultContextTemplate = 'This task is for the project called {{projectName}} in the folder {{folderPath}}. Please work on that project only in that folder for this request unless otherwise specified.';
     const items = await Promise.all(tasks.map(async (t) => {
       const mapped = taskService.mapPrismaTaskToTask(t as Parameters<typeof taskService.mapPrismaTaskToTask>[0]);
       const settings = await stageSettingsService.getEffectiveSettingForStage('Planning', t.projectId);
@@ -117,9 +118,17 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
         planningMessages.length === 0
           ? `Task: ${t.title}\n\nPlanning conversation so far:\n(no messages yet)`
           : `Task: ${t.title}\n\nPlanning conversation so far:\n${planningMessages.map((m) => `[${m.role}] (${m.createdAt}):\n${m.content}`).join('\n\n')}`;
+      let planningPrompt: string | null = settings.systemPrompt ?? null;
+      if (t.project && !t.project.archivedAt) {
+        const template = (settings.projectContextTemplate && settings.projectContextTemplate.trim()) || defaultContextTemplate;
+        const contextParagraph = template
+          .replace(/\{\{projectName\}\}/g, t.project.name)
+          .replace(/\{\{folderPath\}\}/g, t.project.folderPath);
+        planningPrompt = contextParagraph.trim() + (settings.systemPrompt ? '\n\n' + settings.systemPrompt : '');
+      }
       return {
         task: mapped,
-        planningPrompt: settings.systemPrompt ?? null,
+        planningPrompt,
         planningConversationForPrompt,
         planningConversation: planningMessages,
         workFolder,

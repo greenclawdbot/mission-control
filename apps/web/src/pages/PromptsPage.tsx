@@ -123,6 +123,18 @@ export function PromptsPage() {
           {activeTab === 'Planning' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '640px' }}>
               <div>
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Project context template</label>
+                <textarea
+                  className="input textarea"
+                  value={stageForm.projectContextTemplate ?? ''}
+                  onChange={e => updateStage('Planning', 'projectContextTemplate', e.target.value || null)}
+                  placeholder="This task is for the project called {{projectName}} in the folder {{folderPath}}. Please work on that project only in that folder for this request unless otherwise specified."
+                  rows={3}
+                  style={{ width: '100%' }}
+                />
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Prepended to Planning instructions when the task has a project. Use {'{{projectName}}'} and {'{{folderPath}}'}.</p>
+              </div>
+              <div>
                 <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>System prompt</label>
                 <textarea
                   className="input textarea"
