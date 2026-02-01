@@ -14,11 +14,29 @@ datasource db {
 // CORE MODELS
 // ============================================
 
+model Project {
+  id          String    @id @default(uuid())
+  name        String
+  folderPath  String    // Absolute or relative path where work is done
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  archivedAt  DateTime? // null = active; set on "delete" for soft delete
+
+  tasks         Task[]
+  stageSettings StageSetting[]
+
+  @@index([archivedAt])
+}
+
 model Task {
   // Identity
   id          String   @id @default(uuid())
   title       String
   description String?  @db.Text
+
+  // Project (optional)
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id])
 
   // Execution State
   status      String   @default("Backlog")
@@ -75,6 +93,7 @@ model Task {
   @@index([executionState])
   @@index([createdAt])
   @@index([sessionKey])
+  @@index([projectId])
 }
 
 model AuditEvent {
@@ -180,4 +199,25 @@ model TaskStateLog {
   @@index([taskId])
   @@index([status])
   @@index([enteredAt])
+}
+
+// ============================================
+// STAGE SETTINGS (prompts per Kanban stage)
+// ============================================
+
+model StageSetting {
+  id                         String   @id @default(uuid())
+  scope                      String   // "global" | "project"
+  projectId                  String?  // null for global
+  project                    Project? @relation(fields: [projectId], references: [id])
+  stage                      String   // New, Planning, Backlog, Ready, InProgress, Blocked, Review, Failed, Done
+
+  systemPrompt               String?  @db.Text // Planning + other stages
+  defaultModel               String?  // e.g. "minimax"
+  planningDestinationStatus  String?  // Where to move when planning is done (e.g. Backlog)
+  readyInstructions          String?  @db.Text // Prompt sent with Ready items
+
+  @@unique([scope, projectId, stage])
+  @@index([scope, projectId])
+  @@index([projectId])
 }
