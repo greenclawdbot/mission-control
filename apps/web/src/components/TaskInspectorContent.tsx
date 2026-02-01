@@ -27,7 +27,7 @@ interface BotRun {
 
 export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onDelete, projectName, projectColor }: TaskInspectorContentProps) {
   const [task, setTask] = useState(initialTask);
-  const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'conversation' | 'planning' | 'results' | 'runs' | 'activity' | 'state'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'plan' | 'conversation' | 'planning' | 'results' | 'runs' | 'activity' | 'state' | 'prompt-inspector'>('details');
   
   // Sync local state when initialTask changes (e.g., clicking different card or task updated via SSE)
   useEffect(() => {
@@ -54,6 +54,10 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
   // Planning conversation (separate thread)
   const [planningMessages, setPlanningMessages] = useState<TaskPlanningMessage[]>([]);
   const [planningContext, setPlanningContext] = useState('');
+  // Prompt Inspector: raw API output per stage
+  const [promptPreviewRaw, setPromptPreviewRaw] = useState('');
+  const [promptPreviewLoading, setPromptPreviewLoading] = useState(false);
+  const [promptPreviewStage, setPromptPreviewStage] = useState<TaskStatus | null>(null);
 
   // ESC close only
   useEffect(() => {
@@ -447,7 +451,7 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
         padding: '0 20px',
         flexShrink: 0
       }}>
-        {(['details', 'plan', 'conversation', 'planning', 'results', 'runs', 'activity', 'state'] as const).map(tab => (
+        {(['details', 'plan', 'conversation', 'planning', 'results', 'runs', 'activity', 'state', 'prompt-inspector'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -459,10 +463,10 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
               borderBottom: activeTab === tab ? '2px solid var(--accent-blue)' : '2px solid transparent',
               cursor: 'pointer',
               fontSize: '14px',
-              textTransform: 'capitalize'
+              textTransform: tab === 'prompt-inspector' ? 'none' : 'capitalize'
             }}
           >
-            {tab}
+            {tab === 'prompt-inspector' ? 'Prompt Inspector' : tab}
           </button>
         ))}
       </div>
@@ -1278,6 +1282,63 @@ export function TaskInspectorContent({ task: initialTask, onClose, onUpdate, onD
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'prompt-inspector' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, minHeight: 0 }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+              Click a stage to fetch the exact API response the LLM would see for this task in that phase (raw JSON).
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', flexShrink: 0 }}>
+              {TASK_STATUSES.map((stage) => (
+                <button
+                  key={stage}
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={promptPreviewLoading}
+                  onClick={async () => {
+                    setPromptPreviewStage(stage);
+                    setPromptPreviewLoading(true);
+                    setPromptPreviewRaw('');
+                    try {
+                      const raw = await api.getTaskPromptPreviewRaw(task.id, stage);
+                      setPromptPreviewRaw(raw);
+                    } catch (err) {
+                      setPromptPreviewRaw(err instanceof Error ? err.message : String(err));
+                    } finally {
+                      setPromptPreviewLoading(false);
+                    }
+                  }}
+                  style={{
+                    background: promptPreviewStage === stage ? 'var(--accent-blue)' : 'var(--bg-secondary)',
+                    color: promptPreviewStage === stage ? 'white' : 'var(--text-primary)',
+                    borderColor: promptPreviewStage === stage ? 'var(--accent-blue)' : 'var(--border-color)'
+                  }}
+                >
+                  {stage}
+                </button>
+              ))}
+            </div>
+            {promptPreviewLoading && (
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Loading…</div>
+            )}
+            <textarea
+              readOnly
+              value={promptPreviewRaw}
+              style={{
+                flex: 1,
+                minHeight: '200px',
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                padding: '12px',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '6px',
+                resize: 'vertical',
+                color: 'var(--text-primary)'
+              }}
+            />
           </div>
         )}
       </div>

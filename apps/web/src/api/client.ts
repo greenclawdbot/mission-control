@@ -91,6 +91,17 @@ export const api = {
     return fetchJson(`${API_BASE}/tasks/${id}/state-logs`);
   },
 
+  /** Returns raw response body (exact API output) for prompt-preview. On error, throws with response body as message. */
+  async getTaskPromptPreviewRaw(taskId: string, stage: TaskStatus): Promise<string> {
+    const url = `${API_BASE}/tasks/${encodeURIComponent(taskId)}/prompt-preview?stage=${encodeURIComponent(stage)}`;
+    const response = await fetch(url);
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(text || 'Request failed');
+    }
+    return text;
+  },
+
   async getTaskConversation(id: string): Promise<{ messages: TaskConversationMessage[] }> {
     return fetchJson(`${API_BASE}/tasks/${id}/conversation`);
   },

@@ -194,6 +194,106 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
     return { task };
   });
 
+  // GET /api/tasks/:id/prompt-preview - Dev: exact API payload LLM would see for this task in a given stage (no side effects)
+  const promptPreviewQuerySchema = z.object({
+    stage: z.enum(['New', 'Planning', 'Backlog', 'Ready', 'InProgress', 'Blocked', 'Review', 'Failed', 'Done'])
+  });
+  fastify.get<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Querystring: z.infer<typeof promptPreviewQuerySchema>;
+  }>('/tasks/:id/prompt-preview', async (request: FastifyRequest<{
+    Params: z.infer<typeof taskParamsSchema>;
+    Querystring: z.infer<typeof promptPreviewQuerySchema>;
+  }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    const { stage } = promptPreviewQuerySchema.parse(request.query);
+
+    const taskRow = await prisma.task.findUnique({
+      where: { id },
+      include: {
+        progressLog: { orderBy: { completedAt: 'desc' } },
+        project: true
+      }
+    });
+    if (!taskRow) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+    const mapped = taskService.mapPrismaTaskToTask(taskRow as Parameters<typeof taskService.mapPrismaTaskToTask>[0]);
+
+    const defaultContextTemplate = 'This task is for the project called {{projectName}} in the folder {{folderPath}}. Please work on that project only in that folder for this request unless otherwise specified.';
+
+    if (stage === 'Planning') {
+      const settings = await stageSettingsService.getEffectiveSettingForStage('Planning', taskRow.projectId);
+      const workFolder = taskRow.project && !taskRow.project.archivedAt ? taskRow.project.folderPath : null;
+      const projectName = taskRow.project && !taskRow.project.archivedAt ? taskRow.project.name : null;
+      const model = settings.defaultModel && settings.defaultModel !== DEFAULT_MODEL ? settings.defaultModel : undefined;
+      const planningMessages = await taskService.getPlanningConversationForTask(id);
+      const planningConversationForPrompt =
+        planningMessages.length === 0
+          ? `Task: ${taskRow.title}\n\nPlanning conversation so far:\n(no messages yet)`
+          : `Task: ${taskRow.title}\n\nPlanning conversation so far:\n${planningMessages.map((m) => `[${m.role}] (${m.createdAt}):\n${m.content}`).join('\n\n')}`;
+      let planningPrompt: string | null = settings.systemPrompt ?? null;
+      if (taskRow.project && !taskRow.project.archivedAt) {
+        const template = (settings.projectContextTemplate && settings.projectContextTemplate.trim()) || defaultContextTemplate;
+        const contextParagraph = template
+          .replace(/\{\{projectName\}\}/g, taskRow.project.name)
+          .replace(/\{\{folderPath\}\}/g, taskRow.project.folderPath);
+        planningPrompt = contextParagraph.trim() + (settings.systemPrompt ? '\n\n' + settings.systemPrompt : '');
+      }
+      return {
+        task: mapped,
+        planningPrompt,
+        planningConversationForPrompt,
+        planningConversation: planningMessages,
+        workFolder,
+        ...(projectName != null && { projectName }),
+        ...(model && { model })
+      };
+    }
+
+    if (stage === 'Ready') {
+      const readySettings = await stageSettingsService.getEffectiveSettingForStage('Ready', taskRow.projectId);
+      const readyInstructions = readySettings.readyInstructions ?? readySettings.systemPrompt ?? null;
+      const workFolder = taskRow.project && !taskRow.project.archivedAt ? taskRow.project.folderPath : null;
+      const projectName = taskRow.project && !taskRow.project.archivedAt ? taskRow.project.name : null;
+      const model = readySettings.defaultModel && readySettings.defaultModel !== DEFAULT_MODEL ? readySettings.defaultModel : undefined;
+      let readyPrompt: string | null = readyInstructions;
+      if (taskRow.project && !taskRow.project.archivedAt) {
+        const template = (readySettings.projectContextTemplate && readySettings.projectContextTemplate.trim()) || defaultContextTemplate;
+        const contextParagraph = template
+          .replace(/\{\{projectName\}\}/g, taskRow.project.name)
+          .replace(/\{\{folderPath\}\}/g, taskRow.project.folderPath);
+        readyPrompt = contextParagraph.trim() + (readyInstructions ? '\n\n' + readyInstructions : '');
+      }
+      const messages = await taskService.getConversationForTask(id);
+      const conversationBlock =
+        messages.length === 0
+          ? `Task: ${taskRow.title}\n\nConversation so far:\n(no messages yet)`
+          : `Task: ${taskRow.title}\n\nConversation so far:\n${messages.map((m) => `[${m.role}] (${m.createdAt}):\n${m.content}`).join('\n\n')}`;
+      return {
+        task: mapped,
+        action: 'preview',
+        readyPrompt,
+        conversationForPrompt: conversationBlock,
+        conversation: messages,
+        planDocument: taskRow.planDocument ?? null,
+        workFolder,
+        ...(projectName != null && { projectName }),
+        ...(model && { model })
+      };
+    }
+
+    // Other stages: composite context (no dedicated LLM endpoint)
+    const conversation = await taskService.getConversationForTask(id);
+    const planningConversation = await taskService.getPlanningConversationForTask(id);
+    return {
+      task: mapped,
+      conversation,
+      planningConversation,
+      note: 'No dedicated LLM endpoint for this stage. Shown: task + conversation + planning conversation.'
+    };
+  });
+
   // GET /api/tasks/:id/conversation - Get conversation messages for a task
   fastify.get<{
     Params: z.infer<typeof taskParamsSchema>;
