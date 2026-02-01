@@ -140,8 +140,13 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   // POST /api/tasks/:id/planning-complete - External system sends plan; move task to configurable destination
+  // Plan text: canonical field is "plan". Aliases accepted: planning, notes, planning_notes, findings (first non-empty wins).
   const planningCompleteSchema = z.object({
     plan: z.string().optional(),
+    planning: z.string().optional(),
+    notes: z.string().optional(),
+    planning_notes: z.string().optional(),
+    findings: z.string().optional(),
     planChecklist: z.array(z.string()).optional()
   });
   fastify.post<{
@@ -151,14 +156,17 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
     Params: z.infer<typeof taskParamsSchema>;
     Body: z.infer<typeof planningCompleteSchema>;
   }>, reply: FastifyReply) => {
-    const { plan, planChecklist } = planningCompleteSchema.parse(request.body);
+    const body = planningCompleteSchema.parse(request.body);
+    const planText = [body.plan, body.planning, body.notes, body.planning_notes, body.findings]
+      .find((s): s is string => typeof s === 'string' && s.trim() !== '');
+    const planChecklist = body.planChecklist;
     const taskId = request.params.id;
     const task = await taskService.getTaskById(taskId);
     if (!task) {
       return reply.status(404).send({ error: 'Task not found' });
     }
-    if (plan != null && plan.trim() !== '') {
-      await taskService.appendPlanningAssistantMessage(taskId, plan.trim());
+    if (planText != null) {
+      await taskService.appendPlanningAssistantMessage(taskId, planText.trim());
     }
     const settings = await stageSettingsService.getEffectiveSettingForStage('Planning', task.projectId);
     const destination = settings.planningDestinationStatus || 'Backlog';
@@ -168,7 +176,9 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
     if (!updated) {
       return reply.status(404).send({ error: 'Task not found' });
     }
-    return { task: updated };
+    // Return freshly fetched task so response includes planDocument (and any other DB state)
+    const taskForResponse = await taskService.getTaskById(taskId);
+    return { task: taskForResponse ?? updated };
   });
 
   // GET /api/tasks/:id - Get single task

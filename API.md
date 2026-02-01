@@ -134,7 +134,7 @@ Each item includes:
 |--------|----------|-------------|
 | POST | `/tasks/:id/planning-complete` | External system (planner) submits plan; task is moved to configured destination (e.g. Backlog) |
 
-Body: `{ plan?: string, planChecklist?: string[] }`. Both are optional. If `plan` is provided: the plan is appended as an assistant message to the planning conversation and stored as `Task.planDocument`. If `planChecklist` is provided: task's `planChecklist` is updated. The task is then moved to the destination status from stage settings (`planningDestinationStatus` or Backlog).
+Body: `{ plan?: string, planChecklist?: string[] }` plus optional aliases for the plan text. **Plan text field:** Mission Control stores the detailed plan in a dedicated field `Task.planDocument` and shows it in the Plan tab and Planning conversation. The canonical request field is **`plan`**. The API also accepts these aliases (first non-empty wins): **`planning`**, **`notes`**, **`planning_notes`**, **`findings`**. Send the full plan text in any one of these; it is appended as an assistant message to the planning conversation and stored as `planDocument`. `planChecklist` (optional) updates the task's checklist. The task is then moved to the destination status from stage settings (`planningDestinationStatus` or Backlog). If no plan text is sent (in any of the accepted fields), the task moves but no plan is saved or shown.
 
 ## Webhooks
 
