@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DndContext, DragEndEvent, DragStartEvent, useDroppable } from '@dnd-kit/core';
-import { Task, TaskStatus, TASK_STATUSES } from '../shared-types';
+import { Task, TaskStatus, TASK_STATUSES, getProjectColor } from '../shared-types';
 
 const PROJECT_DROP_PREFIX = 'project-';
 import { TaskCard } from '../components/TaskCard';
@@ -14,7 +14,7 @@ import { useActiveProject } from '../contexts/ActiveProjectContext';
 type CollapseOverride = boolean | undefined;
 
 export function KanbanPage() {
-  const { activeProjectId, projects } = useActiveProject();
+  const { activeProjectId, setActiveProjectId, projects } = useActiveProject();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
@@ -37,11 +37,21 @@ export function KanbanPage() {
     });
     return initial;
   });
+  const [taskCounts, setTaskCounts] = useState<Record<string, { notDone: number; done: number }>>({});
+
+  const fetchTaskCounts = useCallback(async () => {
+    try {
+      const res = await api.getProjectTaskCounts();
+      setTaskCounts(res.counts);
+    } catch (e) {
+      console.error('Failed to load project task counts', e);
+    }
+  }, []);
 
   const fetchTasks = useCallback(async () => {
     try {
       const response = await api.getTasks(
-        activeProjectId ? { projectId: activeProjectId } : undefined
+        activeProjectId != null ? { projectId: activeProjectId } : undefined
       );
       setTasks(response.tasks);
     } catch (error) {
@@ -54,6 +64,10 @@ export function KanbanPage() {
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  useEffect(() => {
+    fetchTaskCounts();
+  }, [fetchTaskCounts]);
 
   const handleSSEEvent = useCallback((event: { type: string; data: Task }) => {
     if (isDragging) return;
@@ -87,7 +101,8 @@ export function KanbanPage() {
         setTasks(prev => prev.filter(t => t.id !== event.data.id));
         break;
     }
-  }, [isDragging]);
+    fetchTaskCounts();
+  }, [isDragging, fetchTaskCounts]);
 
   const { nextCheck } = useSSE(handleSSEEvent);
 
@@ -111,6 +126,7 @@ export function KanbanPage() {
         const updated = await api.updateTask(taskId, { projectId });
         setTasks(prev => prev.map(t => t.id === taskId ? updated.task : t));
         if (selectedTask?.id === taskId) setSelectedTask(updated.task);
+        fetchTaskCounts();
       } catch (e) {
         console.error('Failed to set task project', e);
         fetchTasks();
@@ -139,11 +155,13 @@ export function KanbanPage() {
   const handleTaskUpdate = async (updatedTask: Task) => {
     setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
     setSelectedTask(updatedTask);
+    fetchTaskCounts();
   };
 
   const handleTaskDelete = async (taskId: string) => {
     setTasks(prev => prev.filter(t => t.id !== taskId));
     setSelectedTask(null);
+    fetchTaskCounts();
   };
 
   const toggleColumnCollapse = useCallback((status: TaskStatus) => {
@@ -202,9 +220,32 @@ export function KanbanPage() {
                 Projects
               </div>
               <div style={{ padding: '8px', overflow: 'auto', flex: 1, minHeight: 0 }}>
-                <ProjectDropTarget id={`${PROJECT_DROP_PREFIX}none`} label="No project" />
-                {projects.map(p => (
-                  <ProjectDropTarget key={p.id} id={`${PROJECT_DROP_PREFIX}${p.id}`} label={p.name} />
+                <ProjectSidebarItem
+                  label="All"
+                  isActive={activeProjectId === null}
+                  onClick={() => setActiveProjectId(null)}
+                />
+                <ProjectDropTarget
+                  id={`${PROJECT_DROP_PREFIX}none`}
+                  label="No project"
+                  filterValue="none"
+                  activeProjectId={activeProjectId}
+                  setActiveProjectId={setActiveProjectId}
+                  notDone={taskCounts['none']?.notDone}
+                  done={taskCounts['none']?.done}
+                />
+                {projects.map((p, i) => (
+                  <ProjectDropTarget
+                    key={p.id}
+                    id={`${PROJECT_DROP_PREFIX}${p.id}`}
+                    label={p.name}
+                    filterValue={p.id}
+                    activeProjectId={activeProjectId}
+                    setActiveProjectId={setActiveProjectId}
+                    color={getProjectColor(p, i)}
+                    notDone={taskCounts[p.id]?.notDone}
+                    done={taskCounts[p.id]?.done}
+                  />
                 ))}
               </div>
             </aside>
@@ -245,6 +286,7 @@ export function KanbanPage() {
                   key={column.status}
                   status={column.status}
                   tasks={column.tasks}
+                  projects={projects}
                   onTaskClick={setSelectedTask}
                   selectedTask={selectedTask}
                   animatingTasks={animatingTasks}
@@ -274,30 +316,113 @@ export function KanbanPage() {
             setShowNewTask(false);
           }}
           projects={projects}
-          defaultProjectId={activeProjectId}
+          defaultProjectId={activeProjectId === 'none' ? undefined : activeProjectId ?? undefined}
         />
       )}
     </DndContext>
   );
 }
 
-function ProjectDropTarget({ id, label }: { id: string; label: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
+function ProjectSidebarItem({
+  label,
+  isActive,
+  onClick
+}: {
+  label: string;
+  isActive: boolean;
+  onClick: () => void;
+}) {
   return (
     <div
-      ref={setNodeRef}
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={e => e.key === 'Enter' && onClick()}
       style={{
         padding: '10px 12px',
         marginBottom: '4px',
         borderRadius: '8px',
         fontSize: '13px',
-        background: isOver ? 'var(--accent-blue)' : 'var(--bg-tertiary)',
-        color: isOver ? 'white' : 'var(--text-primary)',
+        background: isActive ? 'rgba(88, 166, 255, 0.2)' : 'var(--bg-tertiary)',
+        color: isActive ? 'var(--accent-blue)' : 'var(--text-primary)',
         transition: 'background 0.15s, color 0.15s',
-        cursor: 'default'
+        cursor: 'pointer',
+        border: isActive ? '1px solid var(--accent-blue)' : '1px solid transparent'
       }}
     >
       {label}
+    </div>
+  );
+}
+
+function ProjectDropTarget({
+  id,
+  label,
+  filterValue,
+  activeProjectId,
+  setActiveProjectId,
+  color,
+  notDone,
+  done
+}: {
+  id: string;
+  label: string;
+  filterValue: string;
+  activeProjectId: string | null;
+  setActiveProjectId: (id: string | null) => void;
+  color?: string;
+  notDone?: number;
+  done?: number;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  const isActive = activeProjectId === filterValue;
+  const showPill = notDone !== undefined && done !== undefined;
+  const handleClick = () => setActiveProjectId(filterValue);
+  return (
+    <div
+      ref={setNodeRef}
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={e => e.key === 'Enter' && handleClick()}
+      style={{
+        padding: '10px 12px',
+        marginBottom: '4px',
+        borderRadius: '8px',
+        fontSize: '13px',
+        background: isOver ? 'var(--accent-blue)' : isActive ? 'rgba(88, 166, 255, 0.2)' : 'var(--bg-tertiary)',
+        color: isOver ? 'white' : isActive ? 'var(--accent-blue)' : 'var(--text-primary)',
+        transition: 'background 0.15s, color 0.15s',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '8px',
+        border: !isOver && isActive ? '1px solid var(--accent-blue)' : '1px solid transparent',
+        ...(color && !isOver && !isActive && { borderLeft: `4px solid ${color}` })
+      }}
+    >
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+        {label}
+      </span>
+      {showPill && (
+        <span
+          style={{
+            flexShrink: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            fontSize: '11px',
+            opacity: isOver ? 0.9 : 0.85
+          }}
+        >
+          <span style={{ padding: '1px 4px', borderRight: isOver ? '1px solid rgba(255,255,255,0.5)' : '1px solid var(--border-color)', borderRadius: '4px 0 0 4px' }}>
+            {notDone}
+          </span>
+          <span style={{ padding: '1px 4px', borderRadius: '0 4px 4px 0' }}>
+            {done}
+          </span>
+        </span>
+      )}
     </div>
   );
 }
@@ -317,6 +442,7 @@ const statusColors: Record<TaskStatus, { color: string; label: string }> = {
 function Column({
   status,
   tasks,
+  projects,
   onTaskClick,
   selectedTask,
   animatingTasks,
@@ -326,6 +452,7 @@ function Column({
 }: {
   status: TaskStatus;
   tasks: Task[];
+  projects: { id: string; name: string; color?: string | null }[];
   onTaskClick: (task: Task) => void;
   selectedTask: Task | null;
   animatingTasks: Set<string>;
@@ -441,6 +568,11 @@ function Column({
                   isSelected={selectedTask?.id === task.id}
                   isAnimating={animatingTasks.has(task.id)}
                   isSystemUpdated={systemUpdatedTasks.has(task.id)}
+                  projectName={task.projectId ? projects.find(p => p.id === task.projectId)?.name ?? undefined : undefined}
+                  projectColor={(() => {
+                    const proj = task.projectId ? projects.find(p => p.id === task.projectId) : undefined;
+                    return proj ? getProjectColor(proj, projects.indexOf(proj)) : undefined;
+                  })()}
                 />
               ))
             )}

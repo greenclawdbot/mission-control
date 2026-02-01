@@ -18,6 +18,7 @@ model Project {
   id          String    @id @default(uuid())
   name        String
   folderPath  String    // Absolute or relative path where work is done
+  color       String?   // Optional hex color for UI (e.g. #58a6ff)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   archivedAt  DateTime? // null = active; set on "delete" for soft delete

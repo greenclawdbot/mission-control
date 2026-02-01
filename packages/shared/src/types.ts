@@ -45,6 +45,7 @@ export interface Project {
   id: string;
   name: string;
   folderPath: string;
+  color?: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;

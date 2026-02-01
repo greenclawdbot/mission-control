@@ -12,12 +12,14 @@ const querySchema = z.object({
 
 const createProjectSchema = z.object({
   name: z.string().min(1),
-  folderPath: z.string().min(1)
+  folderPath: z.string().min(1),
+  color: z.string().nullable().optional()
 });
 
 const updateProjectSchema = z.object({
   name: z.string().min(1).optional(),
-  folderPath: z.string().min(1).optional()
+  folderPath: z.string().min(1).optional(),
+  color: z.string().nullable().optional()
 });
 
 const setPathSchema = z.object({
@@ -25,6 +27,12 @@ const setPathSchema = z.object({
 });
 
 export async function projectRoutes(fastify: FastifyInstance): Promise<void> {
+  // GET /api/v1/projects/task-counts - Task counts per project (key "none" = unassigned)
+  fastify.get('/projects/task-counts', async (_request: FastifyRequest, reply: FastifyReply) => {
+    const counts = await projectService.getProjectTaskCounts();
+    return { counts };
+  });
+
   // GET /api/v1/projects - List projects (non-archived by default)
   fastify.get<{
     Querystring: z.infer<typeof querySchema>;

@@ -65,7 +65,7 @@ const querySchema = z.object({
   assignee: z.string().optional(),
   priority: z.string().optional(),
   tags: z.string().optional(),
-  projectId: z.string().uuid().optional()
+  projectId: z.union([z.string().uuid(), z.literal('none')]).optional()
 });
 
 export async function taskRoutes(fastify: FastifyInstance): Promise<void> {

@@ -3,7 +3,7 @@ import { api } from '../api/client';
 
 const STORAGE_KEY = 'mission-control-active-project';
 
-type ProjectOption = { id: string; name: string };
+type ProjectOption = { id: string; name: string; color?: string | null };
 
 type ActiveProjectContextValue = {
   activeProjectId: string | null;
@@ -41,7 +41,7 @@ export function ActiveProjectProvider({ children }: { children: ReactNode }) {
   const loadProjects = useCallback(async () => {
     try {
       const res = await api.getProjects(false);
-      setProjects(res.projects.map(p => ({ id: p.id, name: p.name })));
+      setProjects(res.projects.map(p => ({ id: p.id, name: p.name, color: p.color ?? undefined })));
     } catch (e) {
       console.error('Failed to load projects', e);
     }

@@ -8,6 +8,8 @@ interface TaskCardProps {
   isSelected?: boolean;
   isAnimating?: boolean;
   isSystemUpdated?: boolean;
+  projectName?: string | null;
+  projectColor?: string;
 }
 
 // Utility function to format elapsed time (start to now, or start to end)
@@ -67,7 +69,7 @@ function StateTimerBadge({ task }: { task: Task }) {
   );
 }
 
-export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdated }: TaskCardProps) {
+export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdated, projectName, projectColor }: TaskCardProps) {
   const [clickStart, setClickStart] = useState<{ x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -145,6 +147,26 @@ export function TaskCard({ task, onClick, isSelected, isAnimating, isSystemUpdat
       onClick={handleCardClick}
       data-task-id={task.id}
     >
+      {projectName && (
+        <div
+          className="task-card-project-header"
+          style={{
+            margin: '-14px -14px 0 -14px',
+            padding: '6px 14px',
+            fontSize: '12px',
+            fontWeight: 600,
+            color: projectColor ? 'rgba(255,255,255,0.95)' : 'var(--text-primary)',
+            background: projectColor ?? 'var(--bg-secondary)',
+            borderBottom: '1px solid var(--border-color)',
+            borderRadius: '8px 8px 0 0',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {projectName}
+        </div>
+      )}
       {/* Debug indicator for selected task */}
       {isSelected && (
         <div className="selected-debug-indicator">

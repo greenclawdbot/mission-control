@@ -104,7 +104,8 @@ export async function getAllTasks(filters?: {
   if (filters?.assignee) where.assignee = filters.assignee;
   if (filters?.priority) where.priority = filters.priority;
   if (filters?.tags && filters.tags.length > 0) where.tags = { hasSome: filters.tags.split(',') };
-  if (filters?.projectId) where.projectId = filters.projectId;
+  if (filters?.projectId === 'none') where.projectId = null;
+  else if (filters?.projectId) where.projectId = filters.projectId;
 
   const tasks = await prisma.task.findMany({
     where,

@@ -58,9 +58,22 @@ export interface Project {
   id: string;
   name: string;
   folderPath: string;
+  color?: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;
+}
+
+/** Preset hex colors for project color picker and auto-assign when project has no color. */
+export const PROJECT_COLORS = [
+  '#58a6ff', '#3fb950', '#a371f7', '#d29922', '#f85149',
+  '#79c0ff', '#56d364', '#bc8cff', '#e3b341', '#ff7b72'
+];
+
+/** Effective color for a project: stored color or auto-assigned from palette by index. */
+export function getProjectColor(project: { color?: string | null }, index: number): string {
+  if (project.color) return project.color;
+  return PROJECT_COLORS[index % PROJECT_COLORS.length];
 }
 
 // ============================================

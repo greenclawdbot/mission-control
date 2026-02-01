@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Project } from '../shared-types';
+import { Project, PROJECT_COLORS, getProjectColor } from '../shared-types';
 import { api } from '../api/client';
 
 export function ProjectsPage() {
@@ -10,8 +10,10 @@ export function ProjectsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPath, setEditPath] = useState('');
+  const [editColor, setEditColor] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newPath, setNewPath] = useState('');
+  const [newColor, setNewColor] = useState<string | null>(null);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -33,9 +35,10 @@ export function ProjectsPage() {
     e.preventDefault();
     if (!newName.trim() || !newPath.trim()) return;
     try {
-      await api.createProject({ name: newName.trim(), folderPath: newPath.trim() });
+      await api.createProject({ name: newName.trim(), folderPath: newPath.trim(), color: newColor });
       setNewName('');
       setNewPath('');
+      setNewColor(null);
       setShowAdd(false);
       loadProjects();
     } catch (e) {
@@ -45,7 +48,7 @@ export function ProjectsPage() {
 
   const handleUpdate = async (id: string) => {
     try {
-      await api.updateProject(id, { name: editName.trim(), folderPath: editPath.trim() });
+      await api.updateProject(id, { name: editName.trim(), folderPath: editPath.trim(), color: editColor });
       setEditingId(null);
       loadProjects();
     } catch (e) {
@@ -75,6 +78,7 @@ export function ProjectsPage() {
     setEditingId(p.id);
     setEditName(p.name);
     setEditPath(p.folderPath);
+    setEditColor(p.color ?? null);
   };
 
   return (
@@ -130,9 +134,43 @@ export function ProjectsPage() {
               required
             />
           </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Color</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setNewColor(null)}
+                title="No color"
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  border: newColor === null ? '2px solid var(--text-primary)' : '2px solid transparent',
+                  background: 'var(--bg-tertiary)',
+                  cursor: 'pointer'
+                }}
+              />
+              {PROJECT_COLORS.map(hex => (
+                <button
+                  key={hex}
+                  type="button"
+                  onClick={() => setNewColor(hex)}
+                  title={hex}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    border: newColor === hex ? '2px solid var(--text-primary)' : '2px solid transparent',
+                    background: hex,
+                    cursor: 'pointer'
+                  }}
+                />
+              ))}
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button type="submit" className="btn btn-primary">Create</button>
-            <button type="button" className="btn" onClick={() => { setShowAdd(false); setNewName(''); setNewPath(''); }}>Cancel</button>
+            <button type="button" className="btn" onClick={() => { setShowAdd(false); setNewName(''); setNewPath(''); setNewColor(null); }}>Cancel</button>
           </div>
         </form>
       )}
@@ -159,21 +197,55 @@ export function ProjectsPage() {
             >
               {editingId === p.id ? (
                 <>
-                  <div style={{ display: 'flex', gap: '8px', flex: 1, minWidth: 0 }}>
-                    <input
-                      className="input"
-                      value={editName}
-                      onChange={e => setEditName(e.target.value)}
-                      placeholder="Name"
-                      style={{ flex: 1, minWidth: 0 }}
-                    />
-                    <input
-                      className="input"
-                      value={editPath}
-                      onChange={e => setEditPath(e.target.value)}
-                      placeholder="Folder path"
-                      style={{ flex: 2, minWidth: 0 }}
-                    />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        className="input"
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        placeholder="Name"
+                        style={{ flex: 1, minWidth: 0 }}
+                      />
+                      <input
+                        className="input"
+                        value={editPath}
+                        onChange={e => setEditPath(e.target.value)}
+                        placeholder="Folder path"
+                        style={{ flex: 2, minWidth: 0 }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Color:</span>
+                      <button
+                        type="button"
+                        onClick={() => setEditColor(null)}
+                        title="No color"
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          border: editColor === null ? '2px solid var(--text-primary)' : '2px solid transparent',
+                          background: 'var(--bg-tertiary)',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      {PROJECT_COLORS.map(hex => (
+                        <button
+                          key={hex}
+                          type="button"
+                          onClick={() => setEditColor(hex)}
+                          title={hex}
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: '50%',
+                            border: editColor === hex ? '2px solid var(--text-primary)' : '2px solid transparent',
+                            background: hex,
+                            cursor: 'pointer'
+                          }}
+                        />
+                      ))}
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="btn btn-primary btn-sm" onClick={() => handleUpdate(p.id)}>Save</button>
@@ -182,14 +254,26 @@ export function ProjectsPage() {
                 </>
               ) : (
                 <>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600 }}>{p.name}</div>
-                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {p.folderPath}
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span
+                      style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        flexShrink: 0,
+                        background: getProjectColor(p, projects.indexOf(p))
+                      }}
+                      title={p.color ?? 'Auto'}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{p.name}</div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.folderPath}
+                      </div>
+                      {p.archivedAt && (
+                        <span style={{ fontSize: '12px', color: 'var(--accent-orange)' }}>Archived</span>
+                      )}
                     </div>
-                    {p.archivedAt && (
-                      <span style={{ fontSize: '12px', color: 'var(--accent-orange)' }}>Archived</span>
-                    )}
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                     <button className="btn btn-sm" onClick={() => startEdit(p)}>Edit</button>

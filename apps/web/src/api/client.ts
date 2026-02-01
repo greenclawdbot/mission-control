@@ -114,14 +114,14 @@ export const api = {
     return fetchJson(`${API_BASE}/projects/${id}`);
   },
 
-  async createProject(data: { name: string; folderPath: string }): Promise<{ project: Project }> {
+  async createProject(data: { name: string; folderPath: string; color?: string | null }): Promise<{ project: Project }> {
     return fetchJson(`${API_BASE}/projects`, {
       method: 'POST',
       body: JSON.stringify(data)
     });
   },
 
-  async updateProject(id: string, data: { name?: string; folderPath?: string }): Promise<{ project: Project }> {
+  async updateProject(id: string, data: { name?: string; folderPath?: string; color?: string | null }): Promise<{ project: Project }> {
     return fetchJson(`${API_BASE}/projects/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data)
@@ -139,6 +139,10 @@ export const api = {
     return fetchJson(`${API_BASE}/projects/${id}`, {
       method: 'DELETE'
     });
+  },
+
+  async getProjectTaskCounts(): Promise<{ counts: Record<string, { notDone: number; done: number }> }> {
+    return fetchJson(`${API_BASE}/projects/task-counts`);
   },
 
   // Stage settings (prompts per stage)
