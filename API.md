@@ -25,6 +25,7 @@
   "priority": "Low|Medium|High|Critical",
   "tags": ["tag1", "tag2"],
   "planChecklist": ["step 1", "step 2"],
+  "planDocument": "string|null",
   "currentStepIndex": 0,
   "progressLog": [{"step": "...", "completedAt": "ISO8601"}],
   "blockedReason": "string|null",
@@ -89,6 +90,7 @@ When a task is claimed, the response includes:
 - `readyPrompt`: instructions for the bot (project context + stage instructions first)
 - `conversationForPrompt`: full conversation so far (task title + ordered user/assistant messages) for the LLM to continue the thread
 - `conversation`: array of conversation messages (ordered by `createdAt`) for chat-style consumption
+- `planDocument`: current plan text from the planning phase (nullable); use in addition to conversation for ready work
 - `workFolder`: project folder path when the task has a project; `null` otherwise
 - `projectName`: project name when the task has a project (omitted when null)
 - `model`: optional model override from stage settings
@@ -101,6 +103,38 @@ When a task is claimed, the response includes:
 | POST | `/tasks/:id/conversation` | Append a user message (body: `{ content: string }`) |
 
 When the bot reports results via **PATCH** `/tasks/:id` with `results`, include optional `botRunId` (current run id) so the new assistant message is linked to that run. The API appends an assistant message to the conversation and updates `Task.results`.
+
+## Task planning conversation
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/tasks/:id/planning-conversation` | Get ordered planning conversation messages for a task |
+| POST | `/tasks/:id/planning-conversation` | Append a user message (body: `{ content: string }`). If the task's status is not Planning, the task is moved to Planning so it is queued for the planner. |
+
+Planning conversation is a separate thread from the main task conversation. The planner bot polls **GET** `/tasks/planning-items` for tasks in Planning, receives `planningConversationForPrompt` and `planningConversation`, then submits a plan via **POST** `/tasks/:id/planning-complete` with `plan` (optional). The plan is appended as an assistant message to the planning conversation and stored as `Task.planDocument`. Ready-for-work includes `planDocument` in the response.
+
+## Planning items (bot polling)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/tasks/planning-items` | List tasks in Planning for external polling (query: optional `projectId`) |
+
+Each item includes:
+- `task`: full task object
+- `planningPrompt`: Planning stage system prompt (from stage settings)
+- `planningConversationForPrompt`: task title + planning conversation messages formatted for the LLM
+- `planningConversation`: array of planning messages (ordered by `createdAt`)
+- `workFolder`: project folder path when the task has a project; `null` otherwise
+- `projectName`: project name when the task has a project (omitted when null)
+- `model`: optional model override from stage settings
+
+## Planning complete
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/tasks/:id/planning-complete` | External system (planner) submits plan; task is moved to configured destination (e.g. Backlog) |
+
+Body: `{ plan?: string, planChecklist?: string[] }`. Both are optional. If `plan` is provided: the plan is appended as an assistant message to the planning conversation and stored as `Task.planDocument`. If `planChecklist` is provided: task's `planChecklist` is updated. The task is then moved to the destination status from stage settings (`planningDestinationStatus` or Backlog).
 
 ## Webhooks
 
