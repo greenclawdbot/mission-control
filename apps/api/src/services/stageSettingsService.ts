@@ -68,7 +68,7 @@ export async function getGlobalStageSettings(): Promise<StageSettingRow[]> {
   return rows.map(mapRow);
 }
 
-/** Upsert global stage settings. */
+/** Upsert global stage settings. Avoid upsert with null in compound unique (Prisma/PostgreSQL issue). */
 export async function updateGlobalStageSettings(updates: Record<string, {
   systemPrompt?: string | null;
   defaultModel?: string | null;
@@ -79,28 +79,31 @@ export async function updateGlobalStageSettings(updates: Record<string, {
   for (const stage of STAGES) {
     const data = updates[stage];
     if (!data) continue;
-    await prisma.stageSetting.upsert({
-      where: {
-        scope_projectId_stage: { scope: 'global', projectId: null as unknown as string, stage }
-      },
-      create: {
-        scope: 'global',
-        projectId: null,
-        stage,
-        systemPrompt: data.systemPrompt ?? null,
-        defaultModel: data.defaultModel ?? null,
-        planningDestinationStatus: data.planningDestinationStatus ?? null,
-        readyInstructions: data.readyInstructions ?? null,
-        projectContextTemplate: data.projectContextTemplate ?? null
-      },
-      update: {
-        ...(data.systemPrompt !== undefined && { systemPrompt: data.systemPrompt }),
-        ...(data.defaultModel !== undefined && { defaultModel: data.defaultModel }),
-        ...(data.planningDestinationStatus !== undefined && { planningDestinationStatus: data.planningDestinationStatus }),
-        ...(data.readyInstructions !== undefined && { readyInstructions: data.readyInstructions }),
-        ...(data.projectContextTemplate !== undefined && { projectContextTemplate: data.projectContextTemplate })
-      }
+    const existing = await prisma.stageSetting.findFirst({
+      where: { scope: 'global', projectId: null, stage }
     });
+    const payload = {
+      systemPrompt: data.systemPrompt ?? null,
+      defaultModel: data.defaultModel ?? null,
+      planningDestinationStatus: data.planningDestinationStatus ?? null,
+      readyInstructions: data.readyInstructions ?? null,
+      projectContextTemplate: data.projectContextTemplate ?? null
+    };
+    if (existing) {
+      await prisma.stageSetting.update({
+        where: { id: existing.id },
+        data: payload
+      });
+    } else {
+      await prisma.stageSetting.create({
+        data: {
+          scope: 'global',
+          projectId: null,
+          stage,
+          ...payload
+        }
+      });
+    }
   }
   return getGlobalStageSettings();
 }
