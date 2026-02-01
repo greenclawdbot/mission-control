@@ -569,15 +569,27 @@ export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       const readySettings = await stageSettingsService.getEffectiveSettingForStage('Ready', updatedTask.projectId);
-      const readyPrompt = readySettings.readyInstructions ?? readySettings.systemPrompt ?? null;
+      const readyInstructions = readySettings.readyInstructions ?? readySettings.systemPrompt ?? null;
       const workFolder = updatedTask.project && !updatedTask.project.archivedAt ? updatedTask.project.folderPath : null;
+      const projectName = updatedTask.project && !updatedTask.project.archivedAt ? updatedTask.project.name : null;
       const model = readySettings.defaultModel && readySettings.defaultModel !== DEFAULT_MODEL ? readySettings.defaultModel : undefined;
+
+      let readyPrompt: string | null = readyInstructions;
+      if (updatedTask.project && !updatedTask.project.archivedAt) {
+        const defaultContextTemplate = 'This task is for the project called {{projectName}} in the folder {{folderPath}}. Please work on that project only in that folder for this request unless otherwise specified.';
+        const template = (readySettings.projectContextTemplate && readySettings.projectContextTemplate.trim()) || defaultContextTemplate;
+        const contextParagraph = template
+          .replace(/\{\{projectName\}\}/g, updatedTask.project.name)
+          .replace(/\{\{folderPath\}\}/g, updatedTask.project.folderPath);
+        readyPrompt = contextParagraph.trim() + (readyInstructions ? '\n\n' + readyInstructions : '');
+      }
 
       return {
         task: mappedTask,
         action: 'claimed',
         readyPrompt,
         workFolder,
+        ...(projectName != null && { projectName }),
         ...(model && { model })
       };
     }

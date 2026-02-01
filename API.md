@@ -77,6 +77,20 @@
 }
 ```
 
+## Ready for work (bot polling)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/tasks/ready-for-work` | Claim a Ready task for the bot (query: `sessionKey`, `assignee`) |
+
+When a task is claimed, the response includes:
+- `task`: full task object
+- `action`: `"claimed"`
+- `readyPrompt`: instructions for the bot; when the task has a project, this starts with the rendered project-context template (placeholders `{{projectName}}`, `{{folderPath}}`), then the Ready instructions
+- `workFolder`: project folder path when the task has a project; `null` otherwise
+- `projectName`: project name when the task has a project (omitted when null)
+- `model`: optional model override from stage settings
+
 ## Webhooks
 
 | Method | Endpoint | Description |

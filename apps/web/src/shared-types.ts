@@ -289,6 +289,7 @@ export interface StageSettingRow {
   defaultModel: string | null;
   planningDestinationStatus: string | null;
   readyInstructions: string | null;
+  projectContextTemplate: string | null;
 }
 
 /** Effective settings for a project (merged: project override or global). One per stage. */
@@ -298,5 +299,6 @@ export interface EffectiveStageSettings {
     defaultModel: string | null;
     planningDestinationStatus: string | null;
     readyInstructions: string | null;
+    projectContextTemplate: string | null;
   };
 }

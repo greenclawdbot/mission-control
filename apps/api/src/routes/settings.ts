@@ -14,7 +14,8 @@ const stageUpdateSchema = z.object({
   systemPrompt: z.string().nullable().optional(),
   defaultModel: z.string().nullable().optional(),
   planningDestinationStatus: z.string().nullable().optional(),
-  readyInstructions: z.string().nullable().optional()
+  readyInstructions: z.string().nullable().optional(),
+  projectContextTemplate: z.string().nullable().optional()
 });
 
 const globalUpdateSchema = z.record(z.string(), stageUpdateSchema);

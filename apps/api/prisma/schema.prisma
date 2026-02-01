@@ -217,6 +217,7 @@ model StageSetting {
   defaultModel               String?  // e.g. "minimax"
   planningDestinationStatus  String?  // Where to move when planning is done (e.g. Backlog)
   readyInstructions          String?  @db.Text // Prompt sent with Ready items
+  projectContextTemplate     String?  @db.Text // Template for project context (Ready); {{projectName}}, {{folderPath}}
 
   @@unique([scope, projectId, stage])
   @@index([scope, projectId])

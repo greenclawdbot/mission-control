@@ -13,6 +13,7 @@ function mapRow(row: {
   defaultModel: string | null;
   planningDestinationStatus: string | null;
   readyInstructions: string | null;
+  projectContextTemplate: string | null;
 }): StageSettingRow {
   return {
     id: row.id,
@@ -22,7 +23,8 @@ function mapRow(row: {
     systemPrompt: row.systemPrompt,
     defaultModel: row.defaultModel,
     planningDestinationStatus: row.planningDestinationStatus,
-    readyInstructions: row.readyInstructions
+    readyInstructions: row.readyInstructions,
+    projectContextTemplate: row.projectContextTemplate
   };
 }
 
@@ -50,7 +52,8 @@ export async function getEffectiveSettings(projectId?: string | null): Promise<E
       systemPrompt: row?.systemPrompt ?? null,
       defaultModel: row?.defaultModel ?? null,
       planningDestinationStatus: row?.planningDestinationStatus ?? null,
-      readyInstructions: row?.readyInstructions ?? null
+      readyInstructions: row?.readyInstructions ?? null,
+      projectContextTemplate: row?.projectContextTemplate ?? null
     };
   }
   return result;
@@ -71,6 +74,7 @@ export async function updateGlobalStageSettings(updates: Record<string, {
   defaultModel?: string | null;
   planningDestinationStatus?: string | null;
   readyInstructions?: string | null;
+  projectContextTemplate?: string | null;
 }>): Promise<StageSettingRow[]> {
   for (const stage of STAGES) {
     const data = updates[stage];
@@ -86,13 +90,15 @@ export async function updateGlobalStageSettings(updates: Record<string, {
         systemPrompt: data.systemPrompt ?? null,
         defaultModel: data.defaultModel ?? null,
         planningDestinationStatus: data.planningDestinationStatus ?? null,
-        readyInstructions: data.readyInstructions ?? null
+        readyInstructions: data.readyInstructions ?? null,
+        projectContextTemplate: data.projectContextTemplate ?? null
       },
       update: {
         ...(data.systemPrompt !== undefined && { systemPrompt: data.systemPrompt }),
         ...(data.defaultModel !== undefined && { defaultModel: data.defaultModel }),
         ...(data.planningDestinationStatus !== undefined && { planningDestinationStatus: data.planningDestinationStatus }),
-        ...(data.readyInstructions !== undefined && { readyInstructions: data.readyInstructions })
+        ...(data.readyInstructions !== undefined && { readyInstructions: data.readyInstructions }),
+        ...(data.projectContextTemplate !== undefined && { projectContextTemplate: data.projectContextTemplate })
       }
     });
   }
@@ -116,6 +122,7 @@ export async function updateProjectStageOverrides(
     defaultModel?: string | null;
     planningDestinationStatus?: string | null;
     readyInstructions?: string | null;
+    projectContextTemplate?: string | null;
   }>
 ): Promise<StageSettingRow[]> {
   for (const stage of STAGES) {
@@ -132,13 +139,15 @@ export async function updateProjectStageOverrides(
         systemPrompt: data.systemPrompt ?? null,
         defaultModel: data.defaultModel ?? null,
         planningDestinationStatus: data.planningDestinationStatus ?? null,
-        readyInstructions: data.readyInstructions ?? null
+        readyInstructions: data.readyInstructions ?? null,
+        projectContextTemplate: data.projectContextTemplate ?? null
       },
       update: {
         ...(data.systemPrompt !== undefined && { systemPrompt: data.systemPrompt }),
         ...(data.defaultModel !== undefined && { defaultModel: data.defaultModel }),
         ...(data.planningDestinationStatus !== undefined && { planningDestinationStatus: data.planningDestinationStatus }),
-        ...(data.readyInstructions !== undefined && { readyInstructions: data.readyInstructions })
+        ...(data.readyInstructions !== undefined && { readyInstructions: data.readyInstructions }),
+        ...(data.projectContextTemplate !== undefined && { projectContextTemplate: data.projectContextTemplate })
       }
     });
   }
@@ -154,12 +163,14 @@ export async function getEffectiveSettingForStage(
   defaultModel: string | null;
   planningDestinationStatus: string | null;
   readyInstructions: string | null;
+  projectContextTemplate: string | null;
 }> {
   const all = await getEffectiveSettings(projectId);
   return all[stage] ?? {
     systemPrompt: null,
     defaultModel: null,
     planningDestinationStatus: null,
-    readyInstructions: null
+    readyInstructions: null,
+    projectContextTemplate: null
   };
 }

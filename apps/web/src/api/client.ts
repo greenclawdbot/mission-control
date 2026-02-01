@@ -155,7 +155,7 @@ export const api = {
     return fetchJson(`${API_BASE}/settings/stages/global`);
   },
 
-  async updateGlobalStageSettings(updates: Record<string, { systemPrompt?: string | null; defaultModel?: string | null; planningDestinationStatus?: string | null; readyInstructions?: string | null }>): Promise<{ settings: StageSettingRow[] }> {
+  async updateGlobalStageSettings(updates: Record<string, { systemPrompt?: string | null; defaultModel?: string | null; planningDestinationStatus?: string | null; readyInstructions?: string | null; projectContextTemplate?: string | null }>): Promise<{ settings: StageSettingRow[] }> {
     return fetchJson(`${API_BASE}/settings/stages/global`, {
       method: 'PATCH',
       body: JSON.stringify(updates)
@@ -166,7 +166,7 @@ export const api = {
     return fetchJson(`${API_BASE}/settings/stages/projects/${projectId}`);
   },
 
-  async updateProjectStageOverrides(projectId: string, updates: Record<string, { systemPrompt?: string | null; defaultModel?: string | null; planningDestinationStatus?: string | null; readyInstructions?: string | null }>): Promise<{ settings: StageSettingRow[] }> {
+  async updateProjectStageOverrides(projectId: string, updates: Record<string, { systemPrompt?: string | null; defaultModel?: string | null; planningDestinationStatus?: string | null; readyInstructions?: string | null; projectContextTemplate?: string | null }>): Promise<{ settings: StageSettingRow[] }> {
     return fetchJson(`${API_BASE}/settings/stages/projects/${projectId}`, {
       method: 'PATCH',
       body: JSON.stringify(updates)
