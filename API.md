@@ -86,10 +86,21 @@
 When a task is claimed, the response includes:
 - `task`: full task object
 - `action`: `"claimed"`
-- `readyPrompt`: instructions for the bot; when the task has a project, this starts with the rendered project-context template (placeholders `{{projectName}}`, `{{folderPath}}`), then the Ready instructions
+- `readyPrompt`: instructions for the bot (project context + stage instructions first)
+- `conversationForPrompt`: full conversation so far (task title + ordered user/assistant messages) for the LLM to continue the thread
+- `conversation`: array of conversation messages (ordered by `createdAt`) for chat-style consumption
 - `workFolder`: project folder path when the task has a project; `null` otherwise
 - `projectName`: project name when the task has a project (omitted when null)
 - `model`: optional model override from stage settings
+
+## Task conversation (ongoing feed per task)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/tasks/:id/conversation` | Get ordered conversation messages for a task |
+| POST | `/tasks/:id/conversation` | Append a user message (body: `{ content: string }`) |
+
+When the bot reports results via **PATCH** `/tasks/:id` with `results`, include optional `botRunId` (current run id) so the new assistant message is linked to that run. The API appends an assistant message to the conversation and updates `Task.results`.
 
 ## Webhooks
 
