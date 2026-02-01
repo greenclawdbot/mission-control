@@ -11,7 +11,8 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:backfill-conversation": "node backfill-conversation.cjs"
   },
   "dependencies": {
     "@fastify/cors": "^8.4.1",
