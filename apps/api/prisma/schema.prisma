@@ -72,6 +72,7 @@ model Task {
 
   // Work Output (for auditability + review)
   results      String?  @db.Text  // Markdown summary of work done
+  planDocument String?  @db.Text  // Current plan from planning conversation (updated on planning-complete)
   commits      Json?    // Array of {sha, message, url, timestamp}
 
   // Dates
@@ -86,6 +87,7 @@ model Task {
   progressLog  TaskProgressLogEntry[]
   botRuns      BotRun[]
   conversationMessages TaskConversationMessage[]
+  planningMessages     TaskPlanningMessage[]
   stateLogs    TaskStateLog[]
   dependencies TaskDependency[] @relation("DependentTask")
   dependents   TaskDependency[] @relation("DependencyTask")
@@ -185,6 +187,22 @@ model TaskConversationMessage {
   @@index([taskId])
   @@index([createdAt])
   @@index([botRunId])
+}
+
+// ============================================
+// TASK PLANNING CONVERSATION (separate thread for planning phase)
+// ============================================
+
+model TaskPlanningMessage {
+  id        String   @id @default(uuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  role      String   // "user" | "assistant"
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+  @@index([createdAt])
 }
 
 // ============================================
